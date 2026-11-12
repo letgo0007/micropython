@@ -80,10 +80,14 @@
 #include "uart.h"
 #include "storage.h"
 #include "dma.h"
-#include "i2c.h"
-#include "usb.h"
 
-extern void __fatal_error(const char *);
+#if MICROPY_HW_TINYUSB_STACK
+#include "tusb.h"
+#include "shared/tinyusb/mp_usbd.h"
+#else
+#include "usb.h"
+#endif
+
 #if defined(MICROPY_HW_USB_FS)
 extern PCD_HandleTypeDef pcd_fs_handle;
 #endif
@@ -99,7 +103,7 @@ extern PCD_HandleTypeDef pcd_hs_handle;
 // More information about decoding the fault registers can be found here:
 // http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0646a/Cihdjcfc.html
 
-STATIC char *fmt_hex(uint32_t val, char *buf) {
+static char *fmt_hex(uint32_t val, char *buf) {
     const char *hexDig = "0123456789abcdef";
 
     buf[0] = hexDig[(val >> 28) & 0x0f];
@@ -115,7 +119,7 @@ STATIC char *fmt_hex(uint32_t val, char *buf) {
     return buf;
 }
 
-STATIC void print_reg(const char *label, uint32_t val) {
+static void print_reg(const char *label, uint32_t val) {
     char hexStr[9];
 
     mp_hal_stdout_tx_str(label);
@@ -123,7 +127,7 @@ STATIC void print_reg(const char *label, uint32_t val) {
     mp_hal_stdout_tx_str("\r\n");
 }
 
-STATIC void print_hex_hex(const char *label, uint32_t val1, uint32_t val2) {
+static void print_hex_hex(const char *label, uint32_t val1, uint32_t val2) {
     char hex_str[9];
     mp_hal_stdout_tx_str(label);
     mp_hal_stdout_tx_str(fmt_hex(val1, hex_str));
@@ -147,7 +151,7 @@ void HardFault_C_Handler(ExceptionRegisters_t *regs) {
         powerctrl_mcu_reset();
     }
 
-    #if MICROPY_HW_ENABLE_USB
+    #if MICROPY_HW_STM_USB_STACK
     // We need to disable the USB so it doesn't try to write data out on
     // the VCP and then block indefinitely waiting for the buffer to drain.
     pyb_usb_flags = 0;
@@ -192,7 +196,7 @@ void HardFault_C_Handler(ExceptionRegisters_t *regs) {
 
     /* Go to infinite loop when Hard Fault exception occurs */
     while (1) {
-        __fatal_error("HardFault");
+        MICROPY_BOARD_FATAL_ERROR("HardFault");
     }
 }
 
@@ -246,7 +250,7 @@ void NMI_Handler(void) {
 void MemManage_Handler(void) {
     /* Go to infinite loop when Memory Manage exception occurs */
     while (1) {
-        __fatal_error("MemManage");
+        MICROPY_BOARD_FATAL_ERROR("MemManage");
     }
 }
 
@@ -258,7 +262,7 @@ void MemManage_Handler(void) {
 void BusFault_Handler(void) {
     /* Go to infinite loop when Bus Fault exception occurs */
     while (1) {
-        __fatal_error("BusFault");
+        MICROPY_BOARD_FATAL_ERROR("BusFault");
     }
 }
 
@@ -270,7 +274,7 @@ void BusFault_Handler(void) {
 void UsageFault_Handler(void) {
     /* Go to infinite loop when Usage Fault exception occurs */
     while (1) {
-        __fatal_error("UsageFault");
+        MICROPY_BOARD_FATAL_ERROR("UsageFault");
     }
 }
 
@@ -297,19 +301,53 @@ void DebugMon_Handler(void) {
 /*  file (startup_stm32f4xx.s).                                               */
 /******************************************************************************/
 
-#if defined(STM32L0) || defined(STM32L432xx)
+#if MICROPY_HW_STM_USB_STACK || MICROPY_HW_TINYUSB_STACK
+
+#if defined(STM32G0)
 
 #if MICROPY_HW_USB_FS
-void USB_IRQHandler(void) {
+void USB_UCPD1_2_IRQHandler(void) {
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(0);
+    #else
     HAL_PCD_IRQHandler(&pcd_fs_handle);
+    #endif
 }
 #endif
 
-#elif defined(STM32WB)
+#elif defined(STM32H5)
+
+#if MICROPY_HW_USB_FS
+void USB_DRD_FS_IRQHandler(void) {
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(0);
+    #else
+    HAL_PCD_IRQHandler(&pcd_fs_handle);
+    #endif
+}
+#endif
+
+#elif defined(STM32L0) || defined(STM32L432xx) || defined(STM32L452xx)
+
+#if MICROPY_HW_USB_FS
+void USB_IRQHandler(void) {
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(0);
+    #else
+    HAL_PCD_IRQHandler(&pcd_fs_handle);
+    #endif
+}
+#endif
+
+#elif defined(STM32G4) || defined(STM32L1) || defined(STM32WB)
 
 #if MICROPY_HW_USB_FS
 void USB_LP_IRQHandler(void) {
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(0);
+    #else
     HAL_PCD_IRQHandler(&pcd_fs_handle);
+    #endif
 }
 #endif
 
@@ -323,25 +361,45 @@ void USB_LP_IRQHandler(void) {
 #if MICROPY_HW_USB_FS
 void OTG_FS_IRQHandler(void) {
     IRQ_ENTER(OTG_FS_IRQn);
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(0);
+    #else
     HAL_PCD_IRQHandler(&pcd_fs_handle);
+    #endif
     IRQ_EXIT(OTG_FS_IRQn);
 }
 #endif
 #if MICROPY_HW_USB_HS
+#if defined(STM32N6)
+void USB1_OTG_HS_IRQHandler(void) {
+    IRQ_ENTER(USB1_OTG_HS_IRQn);
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(0);
+    #else
+    HAL_PCD_IRQHandler(&pcd_hs_handle);
+    #endif
+    IRQ_EXIT(USB1_OTG_HS_IRQn);
+}
+#else
 void OTG_HS_IRQHandler(void) {
     IRQ_ENTER(OTG_HS_IRQn);
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(1); // OTG_HS is always RHPORT1 on F4/F7/H7 (not N6, which uses USB1_OTG_HS_IRQHandler)
+    #else
     HAL_PCD_IRQHandler(&pcd_hs_handle);
+    #endif
     IRQ_EXIT(OTG_HS_IRQn);
 }
 #endif
+#endif
 
-#if MICROPY_HW_USB_FS || MICROPY_HW_USB_HS
+#if (MICROPY_HW_USB_FS || MICROPY_HW_USB_HS) && !defined(STM32N6)
 /**
   * @brief  This function handles USB OTG Common FS/HS Wakeup functions.
   * @param  *pcd_handle for FS or HS
   * @retval None
   */
-STATIC void OTG_CMD_WKUP_Handler(PCD_HandleTypeDef *pcd_handle) {
+static void OTG_CMD_WKUP_Handler(PCD_HandleTypeDef *pcd_handle) {
 
     if (pcd_handle->Init.low_power_enable) {
         /* Reset SLEEPDEEP bit of Cortex System Control Register */
@@ -362,15 +420,27 @@ STATIC void OTG_CMD_WKUP_Handler(PCD_HandleTypeDef *pcd_handle) {
         /* Enable the main PLL. */
         __HAL_RCC_PLL_ENABLE();
 
+        #if defined(STM32U5)
+        /* Wait till PLL is ready */
+        while (__HAL_RCC_GET_FLAG(RCC_FLAG_PLL1RDY) == RESET) {
+        }
+
+        /* Select PLL as SYSCLK */
+        MODIFY_REG(RCC->CFGR1, RCC_CFGR1_SW, RCC_SYSCLKSOURCE_PLLCLK);
+        #else
         /* Wait till PLL is ready */
         while (__HAL_RCC_GET_FLAG(RCC_FLAG_PLLRDY) == RESET) {
         }
 
         /* Select PLL as SYSCLK */
         MODIFY_REG(RCC->CFGR, RCC_CFGR_SW, RCC_SYSCLKSOURCE_PLLCLK);
+        #endif
 
         #if defined(STM32H7)
         while (__HAL_RCC_GET_SYSCLK_SOURCE() != RCC_CFGR_SWS_PLL1) {
+        }
+        #elif defined(STM32U5)
+        while (__HAL_RCC_GET_SYSCLK_SOURCE() != RCC_SYSCLKSOURCE_STATUS_PLLCLK) {
         }
         #else
         while (__HAL_RCC_GET_SYSCLK_SOURCE() != RCC_CFGR_SWS_PLL) {
@@ -380,6 +450,9 @@ STATIC void OTG_CMD_WKUP_Handler(PCD_HandleTypeDef *pcd_handle) {
         /* ungate PHY clock */
         __HAL_PCD_UNGATE_PHYCLOCK(pcd_handle);
     }
+    #if MICROPY_HW_TINYUSB_STACK
+    tud_int_handler(0);
+    #endif
 
 }
 #endif
@@ -395,7 +468,9 @@ void OTG_FS_WKUP_IRQHandler(void) {
 
     OTG_CMD_WKUP_Handler(&pcd_fs_handle);
 
-    #if !defined(STM32H7)
+    #if defined(STM32L4)
+    EXTI->PR1 = USB_OTG_FS_WAKEUP_EXTI_LINE;
+    #elif !defined(STM32H5) && !defined(STM32H7) && !defined(STM32U5)
     /* Clear EXTI pending Bit*/
     __HAL_USB_FS_EXTI_CLEAR_FLAG();
     #endif
@@ -404,7 +479,7 @@ void OTG_FS_WKUP_IRQHandler(void) {
 }
 #endif
 
-#if MICROPY_HW_USB_HS
+#if MICROPY_HW_USB_HS && !defined(STM32N6)
 /**
   * @brief  This function handles USB OTG HS Wakeup IRQ Handler.
   * @param  None
@@ -415,7 +490,7 @@ void OTG_HS_WKUP_IRQHandler(void) {
 
     OTG_CMD_WKUP_Handler(&pcd_hs_handle);
 
-    #if !defined(STM32H7)
+    #if !defined(STM32H5) && !defined(STM32H7) && !defined(STM32U5)
     /* Clear EXTI pending Bit*/
     __HAL_USB_HS_EXTI_CLEAR_FLAG();
     #endif
@@ -426,6 +501,8 @@ void OTG_HS_WKUP_IRQHandler(void) {
 
 #endif // !defined(STM32L0)
 
+#endif // MICROPY_HW_STM_USB_STACK || MICROPY_HW_TINYUSB_STACK
+
 /**
   * @brief  This function handles PPP interrupt request.
   * @param  None
@@ -435,69 +512,13 @@ void OTG_HS_WKUP_IRQHandler(void) {
 {
 }*/
 
-/**
-  * @brief  These functions handle the EXTI interrupt requests.
-  * @param  None
-  * @retval None
-  */
-void EXTI0_IRQHandler(void) {
-    IRQ_ENTER(EXTI0_IRQn);
-    Handle_EXTI_Irq(0);
-    IRQ_EXIT(EXTI0_IRQn);
-}
-
-void EXTI1_IRQHandler(void) {
-    IRQ_ENTER(EXTI1_IRQn);
-    Handle_EXTI_Irq(1);
-    IRQ_EXIT(EXTI1_IRQn);
-}
-
-void EXTI2_IRQHandler(void) {
-    IRQ_ENTER(EXTI2_IRQn);
-    Handle_EXTI_Irq(2);
-    IRQ_EXIT(EXTI2_IRQn);
-}
-
-void EXTI3_IRQHandler(void) {
-    IRQ_ENTER(EXTI3_IRQn);
-    Handle_EXTI_Irq(3);
-    IRQ_EXIT(EXTI3_IRQn);
-}
-
-void EXTI4_IRQHandler(void) {
-    IRQ_ENTER(EXTI4_IRQn);
-    Handle_EXTI_Irq(4);
-    IRQ_EXIT(EXTI4_IRQn);
-}
-
-void EXTI9_5_IRQHandler(void) {
-    IRQ_ENTER(EXTI9_5_IRQn);
-    Handle_EXTI_Irq(5);
-    Handle_EXTI_Irq(6);
-    Handle_EXTI_Irq(7);
-    Handle_EXTI_Irq(8);
-    Handle_EXTI_Irq(9);
-    IRQ_EXIT(EXTI9_5_IRQn);
-}
-
-void EXTI15_10_IRQHandler(void) {
-    IRQ_ENTER(EXTI15_10_IRQn);
-    Handle_EXTI_Irq(10);
-    Handle_EXTI_Irq(11);
-    Handle_EXTI_Irq(12);
-    Handle_EXTI_Irq(13);
-    Handle_EXTI_Irq(14);
-    Handle_EXTI_Irq(15);
-    IRQ_EXIT(EXTI15_10_IRQn);
-}
-
 void PVD_IRQHandler(void) {
     IRQ_ENTER(PVD_IRQn);
     Handle_EXTI_Irq(EXTI_PVD_OUTPUT);
     IRQ_EXIT(PVD_IRQn);
 }
 
-#if defined(STM32L4)
+#if defined(STM32L4) || defined(STM32WB) || defined(STM32WL)
 void PVD_PVM_IRQHandler(void) {
     IRQ_ENTER(PVD_PVM_IRQn);
     Handle_EXTI_Irq(EXTI_PVD_OUTPUT);
@@ -519,21 +540,59 @@ void ETH_WKUP_IRQHandler(void) {
 }
 #endif
 
+#if defined(STM32H5) || defined(STM32N6)
+void TAMP_IRQHandler(void) {
+    IRQ_ENTER(TAMP_IRQn);
+    Handle_EXTI_Irq(EXTI_RTC_TAMP);
+    IRQ_EXIT(TAMP_IRQn);
+}
+#elif defined(STM32L1)
+void TAMPER_STAMP_IRQHandler(void) {
+    IRQ_ENTER(TAMPER_STAMP_IRQn);
+    Handle_EXTI_Irq(EXTI_RTC_TIMESTAMP);
+    IRQ_EXIT(TAMPER_STAMP_IRQn);
+}
+#else
 void TAMP_STAMP_IRQHandler(void) {
     IRQ_ENTER(TAMP_STAMP_IRQn);
     Handle_EXTI_Irq(EXTI_RTC_TIMESTAMP);
     IRQ_EXIT(TAMP_STAMP_IRQn);
 }
+#endif
 
-void RTC_WKUP_IRQHandler(void) {
+#if !defined(STM32U5)
+#if defined(STM32H5) || defined(STM32N6)
+void RTC_IRQHandler(void)
+#else
+void RTC_WKUP_IRQHandler(void)
+#endif
+{
     IRQ_ENTER(RTC_WKUP_IRQn);
+    #if defined(STM32G0) || defined(STM32G4) || defined(STM32WL)
+    RTC->MISR &= ~RTC_MISR_WUTMF; // clear wakeup interrupt flag
+    #elif defined(STM32H5) || defined(STM32N6)
+    LL_RTC_ClearFlag_WUT(RTC);
+    #elif defined(STM32H7A3xx) || defined(STM32H7A3xxQ) || defined(STM32H7B3xx) || defined(STM32H7B3xxQ)
+    RTC->SR &= ~RTC_SR_WUTF; // clear wakeup interrupt flag
+    #else
     RTC->ISR &= ~RTC_ISR_WUTF; // clear wakeup interrupt flag
+    #endif
     Handle_EXTI_Irq(EXTI_RTC_WAKEUP); // clear EXTI flag and execute optional callback
     IRQ_EXIT(RTC_WKUP_IRQn);
 }
+#endif
 
-#if defined(STM32F0) || defined(STM32L0)
+#if defined(STM32F0) || defined(STM32G0) || defined(STM32L0)
 
+#if defined(STM32G0)
+void RTC_TAMP_IRQHandler(void) {
+    IRQ_ENTER(RTC_TAMP_IRQn);
+    RTC->SCR |= RTC_SCR_CWUTF; // clear wakeup interrupt flag
+    Handle_EXTI_Irq(EXTI_RTC_WAKEUP);    // clear EXTI flag and execute optional callback
+    Handle_EXTI_Irq(EXTI_RTC_TIMESTAMP); // clear EXTI flag and execute optional callback
+    IRQ_EXIT(RTC_TAMP_IRQn);
+}
+#else
 void RTC_IRQHandler(void) {
     IRQ_ENTER(RTC_IRQn);
     if (RTC->ISR & RTC_ISR_WUTF) {
@@ -550,28 +609,7 @@ void RTC_IRQHandler(void) {
     }
     IRQ_EXIT(RTC_IRQn);
 }
-
-void EXTI0_1_IRQHandler(void) {
-    IRQ_ENTER(EXTI0_1_IRQn);
-    Handle_EXTI_Irq(0);
-    Handle_EXTI_Irq(1);
-    IRQ_EXIT(EXTI0_1_IRQn);
-}
-
-void EXTI2_3_IRQHandler(void) {
-    IRQ_ENTER(EXTI2_3_IRQn);
-    Handle_EXTI_Irq(2);
-    Handle_EXTI_Irq(3);
-    IRQ_EXIT(EXTI2_3_IRQn);
-}
-
-void EXTI4_15_IRQHandler(void) {
-    IRQ_ENTER(EXTI4_15_IRQn);
-    for (int i = 4; i <= 15; ++i) {
-        Handle_EXTI_Irq(i);
-    }
-    IRQ_EXIT(EXTI4_15_IRQn);
-}
+#endif
 
 void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
     IRQ_ENTER(TIM1_BRK_UP_TRG_COM_IRQn);
@@ -581,13 +619,33 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
 
 #endif
 
+#if defined(STM32U5)
+extern RTC_HandleTypeDef RTCHandle;
+void RTC_IRQHandler(void) {
+    IRQ_ENTER(RTC_IRQn);
+    if (RTC->SR & RTC_SR_WUTF) {
+        RTC->SCR = RTC_SCR_CWUTF; // clear wakeup interrupt flag
+        Handle_EXTI_Irq(EXTI_RTC_WAKEUP); // clear EXTI flag and execute optional callback
+    }
+    if (RTC->SR & RTC_SR_ALRAF) {
+        RTC->SCR &= ~RTC_SCR_CALRAF; // clear Alarm A flag
+        Handle_EXTI_Irq(EXTI_RTC_ALARM); // clear EXTI flag and execute optional callback
+    }
+    if (RTC->SR & RTC_SR_TSF) {
+        RTC->SR &= ~RTC_SR_TSF; // clear timestamp flag
+        Handle_EXTI_Irq(EXTI_RTC_TIMESTAMP); // clear EXTI flag and execute optional callback
+    }
+    IRQ_EXIT(RTC_IRQn);
+}
+#endif
+
 void TIM1_BRK_TIM9_IRQHandler(void) {
     IRQ_ENTER(TIM1_BRK_TIM9_IRQn);
     timer_irq_handler(9);
     IRQ_EXIT(TIM1_BRK_TIM9_IRQn);
 }
 
-#if defined(STM32L4)
+#if defined(STM32G4) || defined(STM32L4)
 void TIM1_BRK_TIM15_IRQHandler(void) {
     IRQ_ENTER(TIM1_BRK_TIM15_IRQn);
     timer_irq_handler(15);
@@ -602,7 +660,7 @@ void TIM1_UP_TIM10_IRQHandler(void) {
     IRQ_EXIT(TIM1_UP_TIM10_IRQn);
 }
 
-#if defined(STM32L4) || defined(STM32WB)
+#if defined(STM32G4) || defined(STM32L4) || defined(STM32WB)
 void TIM1_UP_TIM16_IRQHandler(void) {
     IRQ_ENTER(TIM1_UP_TIM16_IRQn);
     timer_irq_handler(1);
@@ -611,7 +669,7 @@ void TIM1_UP_TIM16_IRQHandler(void) {
 }
 #endif
 
-#if defined(STM32H7)
+#if defined(STM32H7) || defined(STM32N6)
 void TIM1_UP_IRQHandler(void) {
     IRQ_ENTER(TIM1_UP_IRQn);
     timer_irq_handler(1);
@@ -625,7 +683,7 @@ void TIM1_TRG_COM_TIM11_IRQHandler(void) {
     IRQ_EXIT(TIM1_TRG_COM_TIM11_IRQn);
 }
 
-#if defined(STM32L4)
+#if defined(STM32G4) || defined(STM32L4) || defined(STM32WB)
 void TIM1_TRG_COM_TIM17_IRQHandler(void) {
     IRQ_ENTER(TIM1_TRG_COM_TIM17_IRQn);
     timer_irq_handler(17);
@@ -645,6 +703,15 @@ void TIM2_IRQHandler(void) {
     IRQ_EXIT(TIM2_IRQn);
 }
 
+#if defined(STM32G0)
+void TIM3_TIM4_IRQHandler(void) {
+    IRQ_ENTER(TIM3_TIM4_IRQn);
+    timer_irq_handler(3);
+    timer_irq_handler(4);
+    IRQ_EXIT(TIM3_TIM4_IRQn);
+}
+
+#else
 void TIM3_IRQHandler(void) {
     IRQ_ENTER(TIM3_IRQn);
     timer_irq_handler(3);
@@ -654,30 +721,64 @@ void TIM3_IRQHandler(void) {
 void TIM4_IRQHandler(void) {
     IRQ_ENTER(TIM4_IRQn);
     timer_irq_handler(4);
+    #if MICROPY_HW_ENABLE_SERVO && MICROPY_HW_SERVO_TIM == 4
+    HAL_TIM_IRQHandler(&servo_tim_handle);
+    #endif
     IRQ_EXIT(TIM4_IRQn);
 }
+#endif
 
 void TIM5_IRQHandler(void) {
     IRQ_ENTER(TIM5_IRQn);
     timer_irq_handler(5);
-    HAL_TIM_IRQHandler(&TIM5_Handle);
+    #if MICROPY_HW_SERVO_TIM == 5
+    HAL_TIM_IRQHandler(&servo_tim_handle);
+    #endif
     IRQ_EXIT(TIM5_IRQn);
 }
 
 #if defined(TIM6) // STM32F401 doesn't have TIM6
+#if defined(STM32G0)
+void TIM6_DAC_LPTIM1_IRQHandler(void) {
+    IRQ_ENTER(TIM6_DAC_LPTIM1_IRQn);
+    timer_irq_handler(6);
+    IRQ_EXIT(TIM6_DAC_LPTIM1_IRQn);
+}
+#elif defined(STM32L1)
+void TIM6_IRQHandler(void) {
+    IRQ_ENTER(TIM6_IRQn);
+    timer_irq_handler(6);
+    IRQ_EXIT(TIM6_IRQn);
+}
+#else
 void TIM6_DAC_IRQHandler(void) {
     IRQ_ENTER(TIM6_DAC_IRQn);
     timer_irq_handler(6);
     IRQ_EXIT(TIM6_DAC_IRQn);
 }
 #endif
+#endif
 
 #if defined(TIM7) // STM32F401 doesn't have TIM7
+#if defined(STM32G0)
+void TIM7_LPTIM2_IRQHandler(void) {
+    IRQ_ENTER(TIM7_LPTIM2_IRQn);
+    timer_irq_handler(7);
+    IRQ_EXIT(TIM7_LPTIM2_IRQn);
+}
+#elif defined(STM32G4)
+void TIM7_DAC_IRQHandler(void) {
+    IRQ_ENTER(TIM7_DAC_IRQn);
+    timer_irq_handler(7);
+    IRQ_EXIT(TIM7_DAC_IRQn);
+}
+#else
 void TIM7_IRQHandler(void) {
     IRQ_ENTER(TIM7_IRQn);
     timer_irq_handler(7);
     IRQ_EXIT(TIM7_IRQn);
 }
+#endif
 #endif
 
 #if defined(TIM8) // STM32F401 doesn't have TIM8
@@ -694,7 +795,7 @@ void TIM8_UP_TIM13_IRQHandler(void) {
     IRQ_EXIT(TIM8_UP_TIM13_IRQn);
 }
 
-#if defined(STM32L4)
+#if defined(STM32G4) || defined(STM32H5) || defined(STM32L4)
 void TIM8_UP_IRQHandler(void) {
     IRQ_ENTER(TIM8_UP_IRQn);
     timer_irq_handler(8);
@@ -712,6 +813,60 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void) {
     IRQ_ENTER(TIM8_TRG_COM_TIM14_IRQn);
     timer_irq_handler(14);
     IRQ_EXIT(TIM8_TRG_COM_TIM14_IRQn);
+}
+#endif
+
+#if defined(STM32L1)
+void TIM9_IRQHandler(void) {
+    IRQ_ENTER(TIM9_IRQn);
+    timer_irq_handler(9);
+    IRQ_EXIT(TIM9_IRQn);
+}
+
+void TIM10_IRQHandler(void) {
+    IRQ_ENTER(TIM9_IRQn);
+    timer_irq_handler(10);
+    IRQ_EXIT(TIM9_IRQn);
+}
+
+void TIM11_IRQHandler(void) {
+    IRQ_ENTER(TIM9_IRQn);
+    timer_irq_handler(11);
+    IRQ_EXIT(TIM9_IRQn);
+}
+#endif
+
+#if defined(STM32G0)
+void TIM14_IRQHandler(void) {
+    IRQ_ENTER(TIM14_IRQn);
+    timer_irq_handler(14);
+    IRQ_EXIT(TIM14_IRQn);
+}
+
+void TIM15_IRQHandler(void) {
+    IRQ_ENTER(TIM15_IRQn);
+    timer_irq_handler(15);
+    IRQ_EXIT(TIM15_IRQn);
+}
+
+void TIM16_FDCAN_IT0_IRQHandler(void) {
+    IRQ_ENTER(TIM16_FDCAN_IT0_IRQn);
+    timer_irq_handler(16);
+    IRQ_EXIT(TIM16_FDCAN_IT0_IRQn);
+}
+
+void TIM17_FDCAN_IT1_IRQHandler(void) {
+    IRQ_ENTER(TIM17_FDCAN_IT1_IRQn);
+    timer_irq_handler(17);
+    IRQ_EXIT(TIM17_FDCAN_IT1_IRQn);
+}
+#endif
+
+#if defined(STM32G4)
+void TIM20_UP_IRQHandler(void) {
+    IRQ_ENTER(TIM20_UP_IRQn);
+    timer_irq_handler(20);
+    IRQ_EXIT(TIM20_UP_IRQn);
 }
 #endif
 
@@ -763,6 +918,29 @@ void USART3_8_IRQHandler(void) {
     IRQ_EXIT(USART3_8_IRQn);
 }
 
+#elif defined(STM32G0)
+
+#if defined(STM32G0B1xx) || defined(STM32G0C1xx)
+void USART2_LPUART2_IRQHandler(void) {
+    IRQ_ENTER(USART2_LPUART2_IRQn);
+    uart_irq_handler(2);
+    uart_irq_handler(PYB_LPUART_2);
+    IRQ_EXIT(USART2_LPUART2_IRQn);
+}
+
+void USART3_4_5_6_LPUART1_IRQHandler(void) {
+    IRQ_ENTER(USART3_4_5_6_LPUART1_IRQn);
+    uart_irq_handler(3);
+    uart_irq_handler(4);
+    uart_irq_handler(5);
+    uart_irq_handler(6);
+    uart_irq_handler(PYB_LPUART_1);
+    IRQ_EXIT(USART3_4_5_6_LPUART1_IRQn);
+}
+#else
+#error Unsupported processor
+#endif
+
 #elif defined(STM32L0)
 
 void USART4_5_IRQHandler(void) {
@@ -782,11 +960,27 @@ void USART3_IRQHandler(void) {
 }
 #endif
 
+#if defined(USART4)
+void USART4_IRQHandler(void) {
+    IRQ_ENTER(USART4_IRQn);
+    uart_irq_handler(4);
+    IRQ_EXIT(USART4_IRQn);
+}
+#endif
+
 #if defined(UART4)
 void UART4_IRQHandler(void) {
     IRQ_ENTER(UART4_IRQn);
     uart_irq_handler(4);
     IRQ_EXIT(UART4_IRQn);
+}
+#endif
+
+#if defined(USART5)
+void USART5_IRQHandler(void) {
+    IRQ_ENTER(USART5_IRQn);
+    uart_irq_handler(5);
+    IRQ_EXIT(USART5_IRQn);
 }
 #endif
 
@@ -838,6 +1032,30 @@ void UART10_IRQHandler(void) {
 }
 #endif
 
+#if defined(USART10)
+void USART10_IRQHandler(void) {
+    IRQ_ENTER(USART10_IRQn);
+    uart_irq_handler(10);
+    IRQ_EXIT(USART10_IRQn);
+}
+#endif
+
+#if defined(USART11)
+void USART11_IRQHandler(void) {
+    IRQ_ENTER(USART11_IRQn);
+    uart_irq_handler(11);
+    IRQ_EXIT(USART11_IRQn);
+}
+#endif
+
+#if defined(UART12)
+void UART12_IRQHandler(void) {
+    IRQ_ENTER(UART12_IRQn);
+    uart_irq_handler(12);
+    IRQ_EXIT(UART12_IRQn);
+}
+#endif
+
 #endif
 
 #if defined(LPUART1)
@@ -848,62 +1066,10 @@ void LPUART1_IRQHandler(void) {
 }
 #endif
 
-#if MICROPY_PY_PYB_LEGACY
-
-#if defined(MICROPY_HW_I2C1_SCL)
-void I2C1_EV_IRQHandler(void) {
-    IRQ_ENTER(I2C1_EV_IRQn);
-    i2c_ev_irq_handler(1);
-    IRQ_EXIT(I2C1_EV_IRQn);
+#if defined(LPUART2)
+void LPUART2_IRQHandler(void) {
+    IRQ_ENTER(LPUART2_IRQn);
+    uart_irq_handler(PYB_LPUART_2);
+    IRQ_EXIT(LPUART2_IRQn);
 }
-
-void I2C1_ER_IRQHandler(void) {
-    IRQ_ENTER(I2C1_ER_IRQn);
-    i2c_er_irq_handler(1);
-    IRQ_EXIT(I2C1_ER_IRQn);
-}
-#endif // defined(MICROPY_HW_I2C1_SCL)
-
-#if defined(MICROPY_HW_I2C2_SCL)
-void I2C2_EV_IRQHandler(void) {
-    IRQ_ENTER(I2C2_EV_IRQn);
-    i2c_ev_irq_handler(2);
-    IRQ_EXIT(I2C2_EV_IRQn);
-}
-
-void I2C2_ER_IRQHandler(void) {
-    IRQ_ENTER(I2C2_ER_IRQn);
-    i2c_er_irq_handler(2);
-    IRQ_EXIT(I2C2_ER_IRQn);
-}
-#endif // defined(MICROPY_HW_I2C2_SCL)
-
-#if defined(MICROPY_HW_I2C3_SCL)
-void I2C3_EV_IRQHandler(void) {
-    IRQ_ENTER(I2C3_EV_IRQn);
-    i2c_ev_irq_handler(3);
-    IRQ_EXIT(I2C3_EV_IRQn);
-}
-
-void I2C3_ER_IRQHandler(void) {
-    IRQ_ENTER(I2C3_ER_IRQn);
-    i2c_er_irq_handler(3);
-    IRQ_EXIT(I2C3_ER_IRQn);
-}
-#endif // defined(MICROPY_HW_I2C3_SCL)
-
-#if defined(MICROPY_HW_I2C4_SCL)
-void I2C4_EV_IRQHandler(void) {
-    IRQ_ENTER(I2C4_EV_IRQn);
-    i2c_ev_irq_handler(4);
-    IRQ_EXIT(I2C4_EV_IRQn);
-}
-
-void I2C4_ER_IRQHandler(void) {
-    IRQ_ENTER(I2C4_ER_IRQn);
-    i2c_er_irq_handler(4);
-    IRQ_EXIT(I2C4_ER_IRQn);
-}
-#endif // defined(MICROPY_HW_I2C4_SCL)
-
-#endif // MICROPY_PY_PYB_LEGACY
+#endif

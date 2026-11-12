@@ -1,4 +1,5 @@
 # Tests domain errors in special math functions
+# requires: float
 
 try:
     import math
@@ -29,9 +30,9 @@ for name, f, args in (
 ):
     for x in args + (inf, -inf, nan):
         try:
-            ans = f(x)
-            print("%.4f" % ans)
+            ans = "%.4f" % f(x)
         except ValueError:
-            print(name, "ValueError")
+            ans = "ValueError"
         except OverflowError:
-            print(name, "OverflowError")
+            ans = "OverflowError"
+        print("%s(%.4f) = %s" % (name, x, ans))

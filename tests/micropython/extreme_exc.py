@@ -1,6 +1,11 @@
 # test some extreme cases of allocating exceptions and tracebacks
+# requires: slice
 
-import micropython
+try:
+    import micropython
+except ImportError:
+    print("SKIP")
+    raise SystemExit
 
 # Check for stackless build, which can't call functions without
 # allocating a frame on the heap.
@@ -126,8 +131,8 @@ def main():
         )
     except Exception as er:
         e = er
-    lst[0][0] = None
-    lst = None
+    while lst:
+        lst[0], lst = None, lst[0]  # unlink lists to free up heap
     print(repr(e)[:10])
 
     # raise a deep exception with the heap locked

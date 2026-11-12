@@ -35,7 +35,7 @@
 #include "input.h"
 
 #if MICROPY_USE_READLINE == 1
-#include "lib/mp-readline/readline.h"
+#include "shared/readline/readline.h"
 #endif
 
 #if MICROPY_USE_READLINE == 0
@@ -43,6 +43,7 @@ char *prompt(char *p) {
     // simple read string
     static char buf[256];
     fputs(p, stdout);
+    fflush(stdout);
     char *s = fgets(buf, sizeof(buf), stdin);
     if (!s) {
         return NULL;
@@ -103,6 +104,9 @@ void prompt_write_history(void) {
     #if MICROPY_USE_READLINE == 1
     char *home = getenv("HOME");
     if (home != NULL) {
+        if (MP_STATE_THREAD(gc_lock_depth) != 0) {
+            return;
+        }
         vstr_t vstr;
         vstr_init(&vstr, 50);
         vstr_printf(&vstr, "%s/.micropython.history", home);

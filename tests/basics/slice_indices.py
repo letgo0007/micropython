@@ -1,4 +1,5 @@
 # Test builtin slice indices resolution
+# requires: slice
 
 # A class that returns an item key
 class A:
@@ -25,3 +26,8 @@ print(A()[2:7:2].indices(5))
 print(A()[2:7:-2].indices(5))
 print(A()[7:2:2].indices(5))
 print(A()[7:2:-2].indices(5))
+
+try:
+    print(A()[::].indices(None))
+except TypeError:
+    print("TypeError")

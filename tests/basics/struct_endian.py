@@ -1,13 +1,11 @@
-# test ustruct and endian specific things
+# test struct and endian specific things
+# requires: host-endianness slice
 
 try:
-    import ustruct as struct
-except:
-    try:
-        import struct
-    except ImportError:
-        print("SKIP")
-        raise SystemExit
+    import struct
+except ImportError:
+    print("SKIP")
+    raise SystemExit
 
 # unpack/unpack_from with unaligned native type
 buf = b'0123456789'

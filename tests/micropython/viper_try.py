@@ -1,4 +1,6 @@
 # test try handling within a viper function
+# requires: viper
+
 
 # basic try-finally
 @micropython.viper
@@ -14,6 +16,7 @@ try:
 except NameError:
     print("NameError")
 
+
 # nested try-except with try-finally
 @micropython.viper
 def f():
@@ -27,6 +30,7 @@ def f():
 
 
 f()
+
 
 # check that locals written to in try blocks keep their values
 @micropython.viper

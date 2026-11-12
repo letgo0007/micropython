@@ -39,6 +39,12 @@ enum {
     PORT_I,
     PORT_J,
     PORT_K,
+    PORT_L,
+    PORT_M,
+    PORT_N,
+    PORT_O,
+    PORT_P,
+    PORT_Q,
 };
 
 // Must have matching entries in SUPPORTED_FN in boards/make-pins.py
@@ -109,6 +115,7 @@ enum {
 // some #defines to massage things. Also I2S and SPI share the same
 // peripheral.
 
+#define GPIO_AF5_I2S1   GPIO_AF5_SPI1
 #define GPIO_AF5_I2S2   GPIO_AF5_SPI2
 #define GPIO_AF5_I2S3   GPIO_AF5_I2S3ext
 #define GPIO_AF6_I2S2   GPIO_AF6_I2S2ext
@@ -116,22 +123,34 @@ enum {
 #define GPIO_AF7_I2S2   GPIO_AF7_SPI2
 #define GPIO_AF7_I2S3   GPIO_AF7_I2S3ext
 
+#define I2S1  SPI1
 #define I2S2  SPI2
 #define I2S3  SPI3
 
-#if defined(STM32H7)
-// Make H7 FDCAN more like CAN
+#if defined(STM32G4) || defined(STM32H7)
+// Make G4/H7 FDCAN more like CAN
 #define CAN1 FDCAN1
 #define CAN2 FDCAN2
 #define GPIO_AF9_CAN1 GPIO_AF9_FDCAN1
 #define GPIO_AF9_CAN2 GPIO_AF9_FDCAN2
 #endif
 
+#if defined(STM32N6)
+// Make N6 FDCAN more like CAN
+#define CAN1 FDCAN1
+#define CAN2 FDCAN2
+#define CAN3 FDCAN3
+#define GPIO_AF6_CAN1 GPIO_AF6_FDCAN1
+#define GPIO_AF6_CAN2 GPIO_AF6_FDCAN2
+#define GPIO_AF6_CAN3 GPIO_AF6_FDCAN3
+#endif
+
 enum {
     PIN_ADC1  = (1 << 0),
     PIN_ADC2  = (1 << 1),
     PIN_ADC3  = (1 << 2),
+    PIN_ADC4  = (1 << 3),
+    PIN_ADC5  = (1 << 4),
 };
 
 typedef GPIO_TypeDef pin_gpio_t;
-

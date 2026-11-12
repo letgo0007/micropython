@@ -1,4 +1,6 @@
 # test for native generators
+# requires: native
+
 
 # simple generator with yield and return
 @micropython.native
@@ -16,6 +18,7 @@ try:
 except StopIteration as e:
     print(e.args[0])
 
+
 # using yield from
 @micropython.native
 def gen2(x):
@@ -23,3 +26,34 @@ def gen2(x):
 
 
 print(list(gen2(3)))
+
+
+# catching an exception from .throw()
+@micropython.native
+def gen3():
+    try:
+        yield 1
+        yield 2
+    except Exception as er:
+        print("caught", repr(er))
+        yield 3
+
+
+g = gen3()
+print(next(g))
+print(g.throw(ValueError(42)))
+
+
+# responding to .close()
+@micropython.native
+def gen4():
+    try:
+        yield 1
+    except:
+        print("raising GeneratorExit")
+        raise GeneratorExit
+
+
+g = gen4()
+print(next(g))
+print(g.close())

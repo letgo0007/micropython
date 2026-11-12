@@ -1,4 +1,5 @@
 # test errors operating on bignum
+# requires: int-big
 
 i = 1 << 65
 
@@ -6,6 +7,16 @@ try:
     i << -1
 except ValueError:
     print("ValueError")
+
+try:
+    i @ 0
+except TypeError:
+    print("TypeError")
+
+try:
+    i @= 0
+except TypeError:
+    print("TypeError")
 
 try:
     len(i)

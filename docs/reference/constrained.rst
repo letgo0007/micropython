@@ -112,8 +112,12 @@ with an underscore as in ``_COLS``: this symbol is not visible outside the
 module so will not occupy RAM.
 
 The argument to ``const()`` may be anything which, at compile time, evaluates
-to an integer e.g. ``0x100`` or ``1 << 8``. It can even include other const
+to a constant e.g. ``0x100``, ``1 << 8`` or ``(True, "string", b"bytes")``
+(see section below for details).  It can even include other const
 symbols that have already been defined, e.g. ``1 << BIT``.
+
+See :func:`micropython.const` for complete documentation including scope
+requirements, import syntax, and other important limitations.
 
 **Constant data structures**
 
@@ -122,12 +126,13 @@ execution from Flash, RAM may be saved as follows. The data should be located in
 Python modules and frozen as bytecode. The data must be defined as `bytes`
 objects. The compiler 'knows' that `bytes` objects are immutable and ensures
 that the objects remain in flash memory rather than being copied to RAM. The
-`ustruct` module can assist in converting between `bytes` types and other
+`struct` module can assist in converting between `bytes` types and other
 Python built-in types.
 
 When considering the implications of frozen bytecode, note that in Python
-strings, floats, bytes, integers and complex numbers are immutable. Accordingly
-these will be frozen into flash. Thus, in the line
+strings, floats, bytes, integers, complex numbers and tuples are immutable.
+Accordingly these will be frozen into flash (for tuples, only if all their
+elements are immutable). Thus, in the line
 
 .. code::
 
@@ -144,18 +149,18 @@ store constant data:
 
 As in the string example, at runtime a reference to the arbitrarily large
 integer is assigned to the variable ``bar``. That reference occupies a
-single machine word. 
+single machine word.
 
-It might be expected that tuples of integers could be employed for the purpose
-of storing constant data with minimal RAM use. With the current compiler this
-is ineffective (the code works, but RAM is not saved).
+Tuples of constant objects are themselves constant. Such constant tuples are
+optimised by the compiler so they do not need to be created at runtime each time
+they are used. For example:
 
 .. code::
 
-    foo = (1, 2, 3, 4, 5, 6, 100000)
+    foo = (1, 2, 3, 4, 5, 6, 100000, ("string", b"bytes", False, True))
 
-At runtime the tuple will be located in RAM. This may be subject to future
-improvement.
+This entire tuple will exist as a single object (potentially in flash if the
+code is frozen) and referenced each time it is needed.
 
 **Needless object creation**
 
@@ -209,12 +214,12 @@ two loops:
         spi.readinto(buf)
         # process data in buf
 
-The first creates a buffer on each pass whereas the second re-uses a pre-allocated
+The first creates a buffer on each pass whereas the second reuses a pre-allocated
 buffer; this is both faster and more efficient in terms of memory fragmentation.
 
 **Bytes are smaller than ints**
 
-On most platforms an integer consumes four bytes. Consider the two calls to the
+On most platforms an integer consumes four bytes. Consider the three calls to the
 function ``foo()``:
 
 .. code::
@@ -222,12 +227,16 @@ function ``foo()``:
     def foo(bar):
         for x in bar:
             print(x)
+    foo([1, 2, 0xff])
     foo((1, 2, 0xff))
     foo(b'\1\2\xff')
 
-In the first call a tuple of integers is created in RAM. The second efficiently
+In the first call a `list` of integers is created in RAM each time the code is
+executed. The second call creates a constant `tuple` object (a `tuple` containing
+only constant objects) as part of the compilation phase, so it is only created
+once and is more efficient than the `list`. The third call efficiently
 creates a `bytes` object consuming the minimum amount of RAM. If the module
-were frozen as bytecode, the `bytes` object would reside in flash.
+were frozen as bytecode, both the `tuple` and `bytes` object would reside in flash.
 
 **Strings Versus Bytes**
 
@@ -245,7 +254,26 @@ instances so the process of eliminating Unicode can be painless.
     b = b'the quick brown fox'  # A bytes instance
 
 Where it is necessary to convert between strings and bytes the :meth:`str.encode`
-and the :meth:`bytes.decode` methods can be used. Note that both strings and bytes
+and the :meth:`bytes.decode` methods can be used. MicroPython validates the
+encoding parameter and only supports UTF-8 and ASCII. The :meth:`bytes.decode`
+method also supports error handlers (``'ignore'`` and ``'replace'``) for handling
+invalid UTF-8, when enabled in the build configuration.
+
+For memory-conscious applications processing untrusted data, using the ``'ignore'``
+error handler can be more efficient than ``'strict'`` mode (the default), as it
+avoids raising exceptions while still recovering valid text::
+
+    # Strict mode (default) raises an error on invalid UTF-8
+    try:
+        s = data.decode('utf-8')
+    except UnicodeError:
+        # Handle error
+        pass
+
+    # Ignore mode skips invalid bytes (more memory-efficient)
+    s = data.decode('utf-8', 'ignore')
+
+Note that both strings and bytes
 are immutable. Any operation which takes as input such an object and produces
 another implies at least one RAM allocation to produce the result. In the
 second line below a new bytes object is allocated. This would also occur if ``foo``
@@ -258,10 +286,11 @@ were a string.
 
 **Runtime compiler execution**
 
-The Python funcitons `eval` and `exec` invoke the compiler at runtime, which
-requires significant amounts of RAM. Note that the ``pickle`` library from
-`micropython-lib` employs `exec`. It may be more RAM efficient to use the
-`ujson` library for object serialisation.
+The Python functions :func:`~builtins.eval` and :func:`~builtins.exec` invoke
+the compiler at runtime, which requires significant amounts of RAM. Note that
+the ``pickle`` library from `micropython-lib` employs
+:func:`~builtins.exec`. It may be more RAM efficient to use the `json` library
+for object serialisation.
 
 **Storing strings in flash**
 
@@ -309,6 +338,12 @@ following periodically:
 
     gc.collect()
     gc.threshold(gc.mem_free() // 4 + gc.mem_alloc())
+
+For more information, see below and the documentation for built-in module
+:mod:`gc`.
+
+For details from MicroPython internals/developer perspective, see also
+:doc:`/develop/memorymgt`.
 
 Fragmentation
 ~~~~~~~~~~~~~
@@ -370,32 +405,14 @@ Running the function uses over 10KiB, but on return ``a`` is garbage because it
 is out of scope and cannot be referenced. The final `gc.collect()` recovers
 that memory.
 
-The final output produced by ``micropython.mem_info(1)`` will vary in detail but
-may be interpreted as follows:
-
-====== =================
-Symbol Meaning
-====== =================
-   .   free block
-   h   head block
-   =   tail block
-   m   marked head block
-   T   tuple
-   L   list
-   D   dict
-   F   float
-   B   byte code
-   M   module
-====== =================
-
-Each letter represents a single block of memory, a block being 16 bytes. So each
-line of the heap dump represents 0x400 bytes or 1KiB of RAM.
+The verbose output from ``micropython.mem_info(1)`` is documented at
+`micropython.mem_info()`.
 
 Control of garbage collection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A GC can be demanded at any time by issuing `gc.collect()`. It is advantageous
-to do this at intervals, firstly to pre-empt fragmentation and secondly for
+to do this at intervals, firstly to preempt fragmentation and secondly for
 performance. A GC can take several milliseconds but is quicker when there is
 little work to do (about 1ms on the Pyboard). An explicit call can minimise that
 delay while ensuring it occurs at points in the program when it is acceptable.
@@ -444,7 +461,7 @@ RAM usage and speed.
 
 Where variables are required whose size is neither a byte nor a machine word
 there are standard libraries which can assist in storing these efficiently and
-in performing conversions. See the `array`, `ustruct` and `uctypes`
+in performing conversions. See the `array`, `struct` and `uctypes`
 modules.
 
 Footnote: gc.collect() return value

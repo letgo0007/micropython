@@ -2,10 +2,8 @@
 This script processes the output from the C preprocessor and extracts all
 qstr. Each qstr is transformed into a qstr definition of the form 'Q(...)'.
 
-This script works with Python 2.6, 2.7, 3.3 and 3.4.
+This script works with Python 3.3+.
 """
-
-from __future__ import print_function
 
 import io
 import os
@@ -21,6 +19,24 @@ _MODE_QSTR = "qstr"
 # Extract MP_COMPRESSED_ROM_TEXT("") macros.  (Which come from MP_ERROR_TEXT)
 _MODE_COMPRESS = "compress"
 
+# Extract MP_REGISTER_(EXTENSIBLE_)MODULE(...) macros.
+_MODE_MODULE = "module"
+
+# Extract MP_REGISTER_ROOT_POINTER(...) macros.
+_MODE_ROOT_POINTER = "root_pointer"
+
+
+class PreprocessorError(Exception):
+    pass
+
+
+def is_c_source(fname):
+    return os.path.splitext(fname)[1] in [".c"]
+
+
+def is_cxx_source(fname):
+    return os.path.splitext(fname)[1] in [".cc", ".cp", ".cxx", ".cpp", ".CPP", ".c++", ".C"]
+
 
 def preprocess():
     if any(src in args.dependencies for src in args.changed_sources):
@@ -32,18 +48,45 @@ def preprocess():
     csources = []
     cxxsources = []
     for source in sources:
-        if source.endswith(".cpp"):
+        if is_cxx_source(source):
             cxxsources.append(source)
-        else:
+        elif is_c_source(source):
             csources.append(source)
     try:
         os.makedirs(os.path.dirname(args.output[0]))
     except OSError:
         pass
 
+    # These regex's are used to filter the preprocessed data, keeping only those lines
+    # that are subsequently needed by the `process_file` step.  The regexs are kept
+    # short so they are as efficient as possible. (The stm32 port needs symbols of the
+    # form `micropy_hw_xxx` so they are also kept.)
+    re_line_file = re.compile(rb"^#(?:line)?\s+\d+\s\"")
+    re_mp_info = re.compile(rb"MP_COMP|MP_QSTR|MP_REGI|micropy_hw")
+
     def pp(flags):
         def run(files):
-            return subprocess.check_output(args.pp + flags + files)
+            try:
+                filtered_lines = []
+                cmd = args.pp + flags + files
+                with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
+                    recent_file = None
+                    for line in proc.stdout:
+                        if line.isspace():
+                            pass
+                        elif re_line_file.match(line):
+                            recent_file = line
+                        elif re_mp_info.search(line):
+                            if recent_file:
+                                filtered_lines.append(recent_file)
+                                recent_file = None
+                            filtered_lines.append(line)
+                    proc.wait()
+                    if proc.returncode:
+                        raise PreprocessorError("command failed: " + " ".join(cmd))
+                return b"".join(filtered_lines)
+            except subprocess.CalledProcessError as er:
+                raise PreprocessorError(str(er))
 
         return run
 
@@ -72,22 +115,27 @@ def write_out(fname, output):
 
 
 def process_file(f):
-    re_line = re.compile(r"#[line]*\s\d+\s\"([^\"]+)\"")
+    # match gcc-like output (# n "file") and msvc-like output (#line n "file")
+    re_line = re.compile(r"^#(?:line)?\s+\d+\s\"([^\"]+)\"")
     if args.mode == _MODE_QSTR:
         re_match = re.compile(r"MP_QSTR_[_a-zA-Z0-9]+")
     elif args.mode == _MODE_COMPRESS:
         re_match = re.compile(r'MP_COMPRESSED_ROM_TEXT\("([^"]*)"\)')
+    elif args.mode == _MODE_MODULE:
+        re_match = re.compile(
+            r"(?:MP_REGISTER_MODULE|MP_REGISTER_EXTENSIBLE_MODULE|MP_REGISTER_MODULE_DELEGATION)\(.*?,\s*.*?\);"
+        )
+    elif args.mode == _MODE_ROOT_POINTER:
+        re_match = re.compile(r"MP_REGISTER_ROOT_POINTER\(.*?\);")
     output = []
     last_fname = None
     for line in f:
         if line.isspace():
             continue
-        # match gcc-like output (# n "file") and msvc-like output (#line n "file")
-        if line.startswith(("# ", "#line")):
-            m = re_line.match(line)
-            assert m is not None
+        m = re_line.match(line)
+        if m:
             fname = m.group(1)
-            if os.path.splitext(fname)[1] not in [".c", ".cpp"]:
+            if not is_c_source(fname) and not is_cxx_source(fname):
                 continue
             if fname != last_fname:
                 write_out(last_fname, output)
@@ -98,7 +146,7 @@ def process_file(f):
             if args.mode == _MODE_QSTR:
                 name = match.replace("MP_QSTR_", "")
                 output.append("Q(" + name + ")")
-            elif args.mode == _MODE_COMPRESS:
+            elif args.mode in (_MODE_COMPRESS, _MODE_MODULE, _MODE_ROOT_POINTER):
                 output.append(match)
 
     if last_fname:
@@ -112,15 +160,12 @@ def cat_together():
 
     hasher = hashlib.md5()
     all_lines = []
-    outf = open(args.output_dir + "/out", "wb")
     for fname in glob.glob(args.output_dir + "/*." + args.mode):
         with open(fname, "rb") as f:
             lines = f.readlines()
             all_lines += lines
     all_lines.sort()
     all_lines = b"\n".join(all_lines)
-    outf.write(all_lines)
-    outf.close()
     hasher.update(all_lines)
     new_hash = hasher.hexdigest()
     # print(new_hash)
@@ -133,14 +178,15 @@ def cat_together():
     mode_full = "QSTR"
     if args.mode == _MODE_COMPRESS:
         mode_full = "Compressed data"
-    if old_hash != new_hash:
+    elif args.mode == _MODE_MODULE:
+        mode_full = "Module registrations"
+    elif args.mode == _MODE_ROOT_POINTER:
+        mode_full = "Root pointer registrations"
+    if old_hash != new_hash or not os.path.exists(args.output_file):
         print(mode_full, "updated")
-        try:
-            # rename below might fail if file exists
-            os.remove(args.output_file)
-        except:
-            pass
-        os.rename(args.output_dir + "/out", args.output_file)
+
+        with open(args.output_file, "wb") as outf:
+            outf.write(all_lines)
         with open(args.output_file + ".hash", "w") as f:
             f.write(new_hash)
     else:
@@ -185,7 +231,12 @@ if __name__ == "__main__":
         for k, v in named_args.items():
             setattr(args, k, v)
 
-        preprocess()
+        try:
+            preprocess()
+        except PreprocessorError as er:
+            print(er)
+            sys.exit(1)
+
         sys.exit(0)
 
     args.mode = sys.argv[2]
@@ -193,7 +244,7 @@ if __name__ == "__main__":
     args.output_dir = sys.argv[4]
     args.output_file = None if len(sys.argv) == 5 else sys.argv[5]  # Unused for command=split
 
-    if args.mode not in (_MODE_QSTR, _MODE_COMPRESS):
+    if args.mode not in (_MODE_QSTR, _MODE_COMPRESS, _MODE_MODULE, _MODE_ROOT_POINTER):
         print("error: mode %s unrecognised" % sys.argv[2])
         sys.exit(2)
 

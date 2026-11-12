@@ -1,8 +1,13 @@
 # test subclassing framebuf.FrameBuffer
 
 try:
-    import framebuf
+    import framebuf, sys
 except ImportError:
+    print("SKIP")
+    raise SystemExit
+
+# This test and its .exp file is based on a little-endian architecture.
+if sys.byteorder != "little":
     print("SKIP")
     raise SystemExit
 
@@ -28,6 +33,7 @@ fb.pixel(0, 0, 0x0506)
 fb.pixel(2, 2, 0x0708)
 fb2.blit(fb, 0, 0)
 print(bytes(fb2))
+
 
 # Test that blitting something that isn't a subclass fails with TypeError.
 class NotAFrameBuf:

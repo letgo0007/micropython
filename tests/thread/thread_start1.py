@@ -2,10 +2,7 @@
 #
 # MIT license; Copyright (c) 2016 Damien P. George on behalf of Pycom Ltd
 
-try:
-    import utime as time
-except ImportError:
-    import time
+import time
 import _thread
 
 
@@ -18,8 +15,13 @@ def thread_entry(n):
         foo()
 
 
-_thread.start_new_thread(thread_entry, (10,))
-_thread.start_new_thread(thread_entry, (20,))
+for i in range(2):
+    while True:
+        try:
+            _thread.start_new_thread(thread_entry, ((i + 1) * 10,))
+            break
+        except OSError:
+            pass
 
 # wait for threads to finish
 time.sleep(1)

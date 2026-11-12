@@ -29,25 +29,17 @@
 #include "py/mpstate.h"
 #include "py/gc.h"
 
-#include "lib/utils/gchelper.h"
+#include "shared/runtime/gchelper.h"
 
 #if MICROPY_ENABLE_GC
 
 void gc_collect(void) {
-    // gc_dump_info();
-
     gc_collect_start();
     gc_helper_collect_regs_and_stack();
     #if MICROPY_PY_THREAD
     mp_thread_gc_others();
     #endif
-    #if MICROPY_EMIT_NATIVE
-    mp_unix_mark_exec();
-    #endif
     gc_collect_end();
-
-    // printf("-----\n");
-    // gc_dump_info();
 }
 
 #endif // MICROPY_ENABLE_GC

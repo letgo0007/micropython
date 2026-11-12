@@ -1,6 +1,13 @@
+# requires: slice
+
 try:
-    import framebuf
+    import framebuf, sys
 except ImportError:
+    print("SKIP")
+    raise SystemExit
+
+# This test and its .exp file is based on a little-endian architecture.
+if sys.byteorder != "little":
     print("SKIP")
     raise SystemExit
 

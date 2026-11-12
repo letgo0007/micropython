@@ -1,4 +1,4 @@
-[![CI badge](https://github.com/micropython/micropython/workflows/unix%20port/badge.svg)](https://github.com/micropython/micropython/actions?query=branch%3Amaster+event%3Apush) [![Coverage badge](https://coveralls.io/repos/micropython/micropython/badge.png?branch=master)](https://coveralls.io/r/micropython/micropython?branch=master)
+[![Unix CI badge](https://github.com/micropython/micropython/actions/workflows/ports_unix.yml/badge.svg)](https://github.com/micropython/micropython/actions?query=branch%3Amaster+event%3Apush) [![STM32 CI badge](https://github.com/micropython/micropython/actions/workflows/ports_stm32.yml/badge.svg)](https://github.com/micropython/micropython/actions?query=branch%3Amaster+event%3Apush) [![Docs CI badge](https://github.com/micropython/micropython/actions/workflows/docs.yml/badge.svg)](https://docs.micropython.org/) [![codecov](https://codecov.io/gh/micropython/micropython/branch/master/graph/badge.svg?token=I92PfD05sD)](https://codecov.io/gh/micropython/micropython)
 
 The MicroPython project
 =======================
@@ -6,176 +6,87 @@ The MicroPython project
   <img src="https://raw.githubusercontent.com/micropython/micropython/master/logo/upython-with-micro.jpg" alt="MicroPython Logo"/>
 </p>
 
-This is the MicroPython project, which aims to put an implementation
-of Python 3.x on microcontrollers and small embedded systems.
+This is the MicroPython project, an implementation of Python 3.x for
+microcontrollers, embedded systems and other constrained platforms.
 You can find the official website at [micropython.org](http://www.micropython.org).
-
-WARNING: this project is in beta stage and is subject to changes of the
-code-base, including project-wide name changes and API changes.
 
 MicroPython implements the entire Python 3.4 syntax (including exceptions,
 `with`, `yield from`, etc., and additionally `async`/`await` keywords from
-Python 3.5). The following core datatypes are provided: `str` (including
-basic Unicode support), `bytes`, `bytearray`, `tuple`, `list`, `dict`, `set`,
-`frozenset`, `array.array`, `collections.namedtuple`, classes and instances.
-Builtin modules include `sys`, `time`, and `struct`, etc. Select ports have
-support for `_thread` module (multithreading). Note that only a subset of
-Python 3 functionality is implemented for the data types and modules.
+Python 3.5 and some select features from later versions). The following core
+datatypes are provided: `str`(including basic Unicode support), `bytes`,
+`bytearray`, `tuple`, `list`, `dict`, `set`, `frozenset`, `array.array`,
+`collections.namedtuple`, classes and instances. Builtin modules include
+`os`, `sys`, `time`, `re`, and `struct`, etc. Some ports have support for
+`_thread` module (multithreading), `socket` and `ssl` for networking, and
+`asyncio`. Note that only a subset of Python 3 functionality is implemented
+for the data types and modules.
 
-MicroPython can execute scripts in textual source form or from precompiled
-bytecode, in both cases either from an on-device filesystem or "frozen" into
-the MicroPython executable.
+MicroPython can execute scripts in textual source form (.py files) or from
+precompiled bytecode (.mpy files), in both cases either from an on-device
+filesystem or "frozen" into the MicroPython executable.
 
-See the repository http://github.com/micropython/pyboard for the MicroPython
-board (PyBoard), the officially supported reference electronic circuit board.
+MicroPython also provides a set of MicroPython-specific modules to access
+hardware-specific functionality and peripherals such as GPIO, Timers, ADC,
+DAC, PWM, SPI, I2C, CAN, Bluetooth, and USB.
 
-Major components in this repository:
-- py/ -- the core Python implementation, including compiler, runtime, and
-  core library.
-- mpy-cross/ -- the MicroPython cross-compiler which is used to turn scripts
-  into precompiled bytecode.
-- ports/unix/ -- a version of MicroPython that runs on Unix.
-- ports/stm32/ -- a version of MicroPython that runs on the PyBoard and similar
-  STM32 boards (using ST's Cube HAL drivers).
-- ports/minimal/ -- a minimal MicroPython port. Start with this if you want
-  to port MicroPython to another microcontroller.
-- tests/ -- test framework and test scripts.
-- docs/ -- user documentation in Sphinx reStructuredText format. Rendered
-  HTML documentation is available at http://docs.micropython.org.
+Getting started
+---------------
 
-Additional components:
-- ports/bare-arm/ -- a bare minimum version of MicroPython for ARM MCUs. Used
-  mostly to control code size.
-- ports/teensy/ -- a version of MicroPython that runs on the Teensy 3.1
-  (preliminary but functional).
-- ports/pic16bit/ -- a version of MicroPython for 16-bit PIC microcontrollers.
-- ports/cc3200/ -- a version of MicroPython that runs on the CC3200 from TI.
-- ports/esp8266/ -- a version of MicroPython that runs on Espressif's ESP8266 SoC.
-- ports/esp32/ -- a version of MicroPython that runs on Espressif's ESP32 SoC.
-- ports/nrf/ -- a version of MicroPython that runs on Nordic's nRF51 and nRF52 MCUs.
-- extmod/ -- additional (non-core) modules implemented in C.
-- tools/ -- various tools, including the pyboard.py module.
-- examples/ -- a few example Python scripts.
+See the [online documentation](https://docs.micropython.org/) for the API
+reference and information about using MicroPython and information about how
+it is implemented.
 
-The subdirectories above may include READMEs with additional info.
+We use [GitHub Discussions](https://github.com/micropython/micropython/discussions)
+as our forum, and [Discord](https://discord.gg/RB8HZSAExQ) for chat. These
+are great places to ask questions and advice from the community or to discuss your
+MicroPython-based projects.
 
-"make" is used to build the components, or "gmake" on BSD-based systems.
-You will also need bash, gcc, and Python 3.3+ available as the command `python3`
-(if your system only has Python 2.7 then invoke make with the additional option
-`PYTHON=python2`).
+For bugs and feature requests, please [raise an issue](https://github.com/micropython/micropython/issues/new/choose)
+and follow the templates there.
 
-The MicroPython cross-compiler, mpy-cross
------------------------------------------
+For information about the [MicroPython pyboard](https://store.micropython.org/pyb-features),
+the officially supported board from the
+[original Kickstarter campaign](https://www.kickstarter.com/projects/214379695/micro-python-python-for-microcontrollers),
+see the [schematics and pinouts](http://github.com/micropython/pyboard) and
+[documentation](https://docs.micropython.org/en/latest/pyboard/quickref.html).
 
-Most ports require the MicroPython cross-compiler to be built first.  This
-program, called mpy-cross, is used to pre-compile Python scripts to .mpy
-files which can then be included (frozen) into the firmware/executable for
-a port.  To build mpy-cross use:
+MicroPython design values
+-------------------------
 
-    $ cd mpy-cross
-    $ make
+"Perfection is achieved, not when there is nothing more to add, but when there
+is nothing left to take away." ―- Antoine de Saint-Exupéry.
 
-The Unix version
-----------------
+For its design and implementation, MicroPython aims to follow a set of values.
+Although not a strict set of rules, these values and principles serve as a
+useful guide for new and seasoned contributors, as well as maintainers.
 
-The "unix" port requires a standard Unix environment with gcc and GNU make.
-x86 and x64 architectures are supported (i.e. x86 32- and 64-bit), as well
-as ARM and MIPS. Making full-featured port to another architecture requires
-writing some assembly code for the exception handling and garbage collection.
-Alternatively, fallback implementation based on setjmp/longjmp can be used.
+MicroPython is at heart a combination of "Micro" and "Python": it's about
+resource constrained systems running the Python programming language.  Both of
+these concepts balance off against each other in all parts of MicroPython's
+design and implementation.
 
-To build (see section below for required dependencies):
+The key concepts that focus the development of MicroPython are:
+- Minimalism: do lots with little.
+- Efficiency: engineering, build, execution, storage, power consumption.
+- Consistency: the whole system feels like it was designed at once.
 
-    $ cd ports/unix
-    $ make submodules
-    $ make
+When using MicroPython, the Python language is used as the human interface to a
+system, giving fine control over the entities attached to that system.
+In a hardware setting, MicroPython aims to give the user a bare-metal feeling:
+one should feel like they have complete control over the system, with very
+little between the programmer and the physical world.
 
-Then to give it a try:
+MicroPython recognises that systems can be very complex.  The existing Python
+libraries in combination with the MicroPython-specific libraries provide a
+user-friendly way to harness the complexity of a system.
 
-    $ ./micropython
-    >>> list(5 * x + y for x in range(10) for y in [4, 2, 1])
-
-Use `CTRL-D` (i.e. EOF) to exit the shell.
-Learn about command-line options (in particular, how to increase heap size
-which may be needed for larger applications):
-
-    $ ./micropython -h
-
-Run complete testsuite:
-
-    $ make test
-
-Unix version comes with a builtin package manager called upip, e.g.:
-
-    $ ./micropython -m upip install micropython-pystone
-    $ ./micropython -m pystone
-
-Browse available modules on
-[PyPI](https://pypi.python.org/pypi?%3Aaction=search&term=micropython).
-Standard library modules come from
-[micropython-lib](https://github.com/micropython/micropython-lib) project.
-
-External dependencies
----------------------
-
-Building MicroPython ports may require some dependencies installed.
-
-For Unix port, `libffi` library and `pkg-config` tool are required. On
-Debian/Ubuntu/Mint derivative Linux distros, install `build-essential`
-(includes toolchain and make), `libffi-dev`, and `pkg-config` packages.
-
-Other dependencies can be built together with MicroPython. This may
-be required to enable extra features or capabilities, and in recent
-versions of MicroPython, these may be enabled by default. To build
-these additional dependencies, in the port directory you're
-interested in (e.g. `ports/unix/`) first execute:
-
-    $ make submodules
-
-This will fetch all the relevant git submodules (sub repositories) that
-the port needs.  Use the same command to get the latest versions of
-submodules as they are updated from time to time. After that execute:
-
-    $ make deplibs
-
-This will build all available dependencies (regardless whether they
-are used or not). If you intend to build MicroPython with additional
-options (like cross-compiling), the same set of options should be passed
-to `make deplibs`. To actually enable/disable use of dependencies, edit
-`ports/unix/mpconfigport.mk` file, which has inline descriptions of the options.
-For example, to build SSL module (required for `upip` tool described above,
-and so enabled by default), `MICROPY_PY_USSL` should be set to 1.
-
-For some ports, building required dependences is transparent, and happens
-automatically.  But they still need to be fetched with the `make submodules`
-command.
-
-The STM32 version
------------------
-
-The "stm32" port requires an ARM compiler, arm-none-eabi-gcc, and associated
-bin-utils.  For those using Arch Linux, you need arm-none-eabi-binutils,
-arm-none-eabi-gcc and arm-none-eabi-newlib packages.  Otherwise, try here:
-https://launchpad.net/gcc-arm-embedded
-
-To build:
-
-    $ cd ports/stm32
-    $ make submodules
-    $ make
-
-You then need to get your board into DFU mode.  On the pyboard, connect the
-3V3 pin to the P1/DFU pin with a wire (on PYBv1.0 they are next to each other
-on the bottom left of the board, second row from the bottom).
-
-Then to flash the code via USB DFU to your device:
-
-    $ make deploy
-
-This will use the included `tools/pydfu.py` script.  If flashing the firmware
-does not work it may be because you don't have the correct permissions, and
-need to use `sudo make deploy`.
-See the README.md file in the ports/stm32/ directory for further details.
+Python language compatibility is very important to MicroPython, and at first
+glance MicroPython should look just like regular Python.  In the first instance,
+most Python scripts should run unchanged on MicroPython, even on devices with very
+tight resources.  Beyond that, there are ways to extend MicroPython if needed to
+better match Python.  The provided built-in modules are an efficient subset of
+the corresponding Python ones, without duplication of functionality, and allow
+extension in Python if needed.
 
 Contributing
 ------------
@@ -186,3 +97,131 @@ productive, please be sure to follow the
 and the [Code Conventions](https://github.com/micropython/micropython/blob/master/CODECONVENTIONS.md).
 Note that MicroPython is licenced under the MIT license, and all contributions
 should follow this license.
+
+About this repository
+---------------------
+
+This repository contains the following components:
+- [py/](py/) -- the core Python implementation, including compiler, runtime, and
+  core library.
+- [mpy-cross/](mpy-cross/) -- the MicroPython cross-compiler which is used to turn scripts
+  into precompiled bytecode.
+- [ports/](ports/) -- platform-specific code for the various ports and architectures that MicroPython runs on.
+- [lib/](lib/) -- submodules for external dependencies.
+- [tests/](tests/) -- test framework and test scripts.
+- [docs/](docs/) -- user documentation in Sphinx reStructuredText format. This is used to generate the [online documentation](http://docs.micropython.org).
+- [extmod/](extmod/) -- additional (non-core) modules implemented in C.
+- [tools/](tools/) -- various tools, including the pyboard.py module.
+- [examples/](examples/) -- a few example Python scripts.
+
+"make" is used to build the components, or "gmake" on BSD-based systems.
+You will also need bash, gcc, and Python 3.3+ available as the command `python3`.
+Some ports (rp2 and esp32) additionally use CMake.
+
+Supported platforms & architectures
+-----------------------------------
+
+MicroPython runs on a wide range of microcontrollers, as well as on Unix-like
+(including Linux, BSD, macOS, WSL) and Windows systems.
+
+Microcontroller targets can be as small as 256kiB flash + 16kiB RAM, although
+devices with at least 512kiB flash + 128kiB RAM allow a much more
+full-featured experience.
+
+The [Unix](ports/unix) and [Windows](ports/windows) ports allow both
+development and testing of MicroPython itself, as well as providing
+lightweight alternative to CPython on these platforms (in particular on
+embedded Linux systems).
+
+Over twenty different MicroPython ports are provided in this repository,
+split across three
+[MicroPython Support Tiers](https://docs.micropython.org/en/latest/develop/support_tiers.html).
+
+Tier 1 Ports
+============
+
+👑 Ports in [Tier 1](https://docs.micropython.org/en/latest/develop/support_tiers.html)
+are mature and have the most active development, support and testing:
+
+| Port                     | Target                                                                                 | Quick Reference                                                      |
+|--------------------------|----------------------------------------------------------------------------------------|----------------------------------------------------------------------|
+| [esp32](ports/esp32)*    | Espressif ESP32 SoCs (ESP32, ESP32S2, ESP32S3, ESP32C3, ESP32C6)                       | [here](https://docs.micropython.org/en/latest/esp32/quickref.html)   |
+| [mimxrt](ports/mimxrt)   | NXP m.iMX RT                                                                           | [here](https://docs.micropython.org/en/latest/mimxrt/quickref.html)  |
+| [rp2](ports/rp2)         | Raspberry Pi RP2040 and RP2350                                                         | [here](https://docs.micropython.org/en/latest/rp2/quickref.html)     |
+| [samd](ports/samd)       | Microchip (formerly Atmel) SAMD21 and SAMD51                                           | [here](https://docs.micropython.org/en/latest/samd/quickref.html)    |
+| [stm32](ports/stm32)     | STMicroelectronics STM32 MCUs (F0, F4, F7, G0, G4, H5, H7, L0, L1, L4, N6, WB, WL)     | [here](https://docs.micropython.org/en/latest/pyboard/quickref.html) |
+| [unix](ports/unix)       | Linux, BSD, macOS, WSL                                                                 | [here](https://docs.micropython.org/en/latest/unix/quickref.html)    |
+| [windows](ports/windows) | Microsoft Windows                                                                      | [here](https://docs.micropython.org/en/latest/unix/quickref.html)    |
+
+An asterisk indicates that the port has ongoing financial support from the vendor.
+
+Tier 2 Ports
+============
+
+✔ Ports in [Tier 2](https://docs.micropython.org/en/latest/develop/support_tiers.html)
+are less mature and less actively developed and tested than Tier 1, but
+still fully supported:
+
+| Port                             | Target                                                      | Quick Reference                                                         |
+|----------------------------------|-------------------------------------------------------------|-------------------------------------------------------------------------|
+| [alif](ports/alif)               | Alif Semiconductor Ensemble MCUs (E3, E7)                   |                                                                         |
+| [embed](ports/embed)             | Generates a set of .c/.h files for embedding into a project |                                                                         |
+| [nrf](ports/nrf)                 | Nordic Semiconductor nRF51 and nRF52                        |                                                                         |
+| [psoc-edge](ports/psoc-edge)     | Infineon PSOC™ Edge                                         | [here](https://docs.micropython.org/en/latest/psoc-edge/quickref.html)  |
+| [renesas-ra](ports/renesas-ra)   | Renesas RA family                                           | [here](https://docs.micropython.org/en/latest/renesas-ra/quickref.html) |
+| [webassembly](ports/webassembly) | Emscripten port targeting browsers and NodeJS               |                                                                         |
+| [zephyr](ports/zephyr)           | Zephyr RTOS                                                 | [here](https://docs.micropython.org/en/latest/zephyr/quickref.html)     |
+
+Tier 3 Ports
+============
+
+Ports in [Tier 3](https://docs.micropython.org/en/latest/develop/support_tiers.html)
+are built in CI but not regularly tested by the MicroPython maintainers:
+
+| Port                       | Target                                                            | Quick Reference                                                         |
+|----------------------------|-------------------------------------------------------------------|-------------------------------------------------------------------------|
+| [cc3200](ports/cc3200)     | Texas Instruments CC3200                                          | [For WiPy](https://docs.micropython.org/en/latest/wipy/quickref.html)   |
+| [esp8266](ports/esp8266)   | Espressif ESP8266 SoC                                             | [here](https://docs.micropython.org/en/latest/esp8266/quickref.html)    |
+| [pic16bit](ports/pic16bit) | Microchip PIC 16-bit                                              |                                                                         |
+
+Additional Ports
+================
+
+In addition to the above there is a Tier M containing ports that are used
+primarily for maintenance, development and testing:
+
+- The ["bare-arm"](ports/bare-arm) port is an example of the absolute minimum
+  configuration that still includes the compiler, and is used to keep track
+  of the code size of the core runtime and VM.
+
+- The ["minimal"](ports/minimal) port provides an example of a very basic
+  MicroPython port and can be compiled as both a standalone Linux binary as
+  well as for ARM Cortex-M4. Start with this if you want to port MicroPython
+  to another microcontroller.
+
+- The [qemu](ports/qemu) port is a QEMU-based emulated target for Cortex-A,
+  Cortex-M, RISC-V 32-bit, RISC-V 64-bit, and PowerPC 64-bit architectures.
+
+The MicroPython cross-compiler, mpy-cross
+-----------------------------------------
+
+Most ports require the [MicroPython cross-compiler](mpy-cross) to be built
+first.  This program, called mpy-cross, is used to pre-compile Python scripts
+to .mpy files which can then be included (frozen) into the
+firmware/executable for a port.  To build mpy-cross use:
+
+    $ cd mpy-cross
+    $ make
+
+External dependencies
+---------------------
+
+The core MicroPython VM and runtime has no external dependencies, but a given
+port might depend on third-party drivers or vendor HALs. This repository
+includes [several submodules](lib/) linking to these external dependencies.
+Before compiling a given port, use
+
+    $ cd ports/name
+    $ make submodules
+
+to ensure that all required submodules are initialised.

@@ -1,3 +1,5 @@
+# requires: bytearray slice
+
 print(bytearray(4))
 a = bytearray([1, 2, 200])
 print(type(a))
@@ -26,6 +28,26 @@ print(bytearray([1]) == bytearray([2]))
 print(bytearray([1]) == b"1")
 print(b"1" == bytearray([1]))
 print(bytearray() == bytearray())
+
+b1 = bytearray([1, 2, 3])
+b2 = bytearray([1, 2, 3])
+b3 = bytearray([1, 3])
+print(b1 == b2)
+print(b2 != b3)
+print(b1 <= b2)
+print(b1 <= b3)
+print(b1 < b3)
+print(b1 >= b2)
+print(b3 >= b2)
+print(b3 > b2)
+print(b1 != b2)
+print(b2 == b3)
+print(b1 > b2)
+print(b1 > b3)
+print(b1 >= b3)
+print(b1 < b2)
+print(b3 < b2)
+print(b3 <= b2)
 
 # comparison with other type should return False
 print(bytearray() == 1)

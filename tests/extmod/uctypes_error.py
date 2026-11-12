@@ -8,6 +8,12 @@ except ImportError:
 
 data = bytearray(b"01234567")
 
+# first argument isn't an integer
+try:
+    uctypes.struct(data, {})
+except TypeError:
+    print("TypeError")
+
 # del subscr not supported
 S = uctypes.struct(uctypes.addressof(data), {})
 try:
@@ -21,6 +27,13 @@ try:
     S.x
 except TypeError:
     print("TypeError")
+
+# non-existent attributes should raise AttributeError
+S = uctypes.struct(uctypes.addressof(data), {})
+try:
+    S.x
+except AttributeError:
+    print("AttributeError")
 
 # can't access attribute with invalid descriptor
 S = uctypes.struct(uctypes.addressof(data), {"x": []})

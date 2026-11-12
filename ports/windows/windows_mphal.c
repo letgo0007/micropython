@@ -32,19 +32,20 @@
 #include <sys/time.h>
 #include <windows.h>
 #include <unistd.h>
+#include <bcrypt.h>
 
 HANDLE std_in = NULL;
 HANDLE con_out = NULL;
 DWORD orig_mode = 0;
 
-STATIC void assure_stdin_handle() {
+static void assure_stdin_handle() {
     if (!std_in) {
         std_in = GetStdHandle(STD_INPUT_HANDLE);
         assert(std_in != INVALID_HANDLE_VALUE);
     }
 }
 
-STATIC void assure_conout_handle() {
+static void assure_conout_handle() {
     if (!con_out) {
         con_out = CreateFile("CONOUT$", GENERIC_READ | GENERIC_WRITE,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -69,7 +70,7 @@ void mp_hal_stdio_mode_orig(void) {
 }
 
 // Handler to be installed by SetConsoleCtrlHandler, currently used only to handle Ctrl-C.
-// This handler has to be installed just once (this has to be done elswhere in init code).
+// This handler has to be installed just once (this has to be done elsewhere in init code).
 // Previous versions of the mp_hal code would install a handler whenever Ctrl-C input is
 // allowed and remove the handler again when it is not. That is not necessary though (1),
 // and it might introduce problems (2) because console notifications are delivered to the
@@ -80,11 +81,11 @@ void mp_hal_stdio_mode_orig(void) {
 // the thread created for handling it might not be running yet so we'd miss the notification.
 BOOL WINAPI console_sighandler(DWORD evt) {
     if (evt == CTRL_C_EVENT) {
-        if (MP_STATE_VM(mp_pending_exception) == MP_OBJ_FROM_PTR(&MP_STATE_VM(mp_kbd_exception))) {
+        if (MP_STATE_MAIN_THREAD(mp_pending_exception) == MP_OBJ_FROM_PTR(&MP_STATE_VM(mp_kbd_exception))) {
             // this is the second time we are called, so die straight away
             exit(1);
         }
-        mp_keyboard_interrupt();
+        mp_sched_keyboard_interrupt();
         return TRUE;
     }
     return FALSE;
@@ -142,7 +143,7 @@ typedef struct item_t {
 } item_t;
 
 // map virtual key codes to key sequences known by MicroPython's readline implementation
-STATIC item_t keyCodeMap[] = {
+static item_t keyCodeMap[] = {
     {VK_UP, "[A"},
     {VK_DOWN, "[B"},
     {VK_RIGHT, "[C"},
@@ -154,7 +155,7 @@ STATIC item_t keyCodeMap[] = {
 };
 
 // likewise, but with Ctrl key down
-STATIC item_t ctrlKeyCodeMap[] = {
+static item_t ctrlKeyCodeMap[] = {
     {VK_LEFT, "b"},
     {VK_RIGHT, "f"},
     {VK_DELETE, "d"},
@@ -162,9 +163,9 @@ STATIC item_t ctrlKeyCodeMap[] = {
     {0, ""} // sentinel
 };
 
-STATIC const char *cur_esc_seq = NULL;
+static const char *cur_esc_seq = NULL;
 
-STATIC int esc_seq_process_vk(WORD vk, bool ctrl_key_down) {
+static int esc_seq_process_vk(WORD vk, bool ctrl_key_down) {
     for (item_t *p = (ctrl_key_down ? ctrlKeyCodeMap : keyCodeMap); p->vkey != 0; ++p) {
         if (p->vkey == vk) {
             cur_esc_seq = p->seq;
@@ -174,7 +175,7 @@ STATIC int esc_seq_process_vk(WORD vk, bool ctrl_key_down) {
     return 0; // nothing found
 }
 
-STATIC int esc_seq_chr() {
+static int esc_seq_chr() {
     if (cur_esc_seq) {
         const char c = *cur_esc_seq++;
         if (c) {
@@ -220,10 +221,11 @@ int mp_hal_stdin_rx_chr(void) {
     }
 }
 
-void mp_hal_stdout_tx_strn(const char *str, size_t len) {
+mp_uint_t mp_hal_stdout_tx_strn(const char *str, size_t len) {
     MP_THREAD_GIL_EXIT();
-    write(STDOUT_FILENO, str, len);
+    int ret = write(STDOUT_FILENO, str, len);
     MP_THREAD_GIL_ENTER();
+    return ret < 0 ? 0 : ret; // return the number of bytes written, so in case of an error in the syscall, return 0
 }
 
 void mp_hal_stdout_tx_strn_cooked(const char *str, size_t len) {
@@ -262,8 +264,34 @@ uint64_t mp_hal_time_ns(void) {
     return (uint64_t)tv.tv_sec * 1000000000ULL + (uint64_t)tv.tv_usec * 1000ULL;
 }
 
-// TODO: POSIX et al. define usleep() as guaranteedly capable only of 1s sleep:
-// "The useconds argument shall be less than one million."
+void msec_sleep(double msec) {
+    if (msec < 0.0) {
+        msec = 0.0;
+    }
+    SleepEx((DWORD)msec, TRUE);
+}
+
+#ifdef _MSC_VER
+int usleep(__int64 usec) {
+    msec_sleep((double)usec / 1000.0);
+    return 0;
+}
+#endif
+
 void mp_hal_delay_ms(mp_uint_t ms) {
-    usleep((ms) * 1000);
+    #if MICROPY_ENABLE_SCHEDULER
+    mp_uint_t start = mp_hal_ticks_ms();
+    while (mp_hal_ticks_ms() - start < ms) {
+        mp_event_wait_ms(1);
+    }
+    #else
+    msec_sleep((double)ms);
+    #endif
+}
+
+void mp_hal_get_random(size_t n, uint8_t *buf) {
+    NTSTATUS result = BCryptGenRandom(NULL, (unsigned char *)buf, n, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    if (!BCRYPT_SUCCESS(result)) {
+        mp_raise_OSError(errno);
+    }
 }

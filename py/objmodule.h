@@ -28,20 +28,24 @@
 
 #include "py/obj.h"
 
+#ifndef NO_QSTR
+// Only include module definitions when not doing qstr extraction, because the
+// qstr extraction stage also generates this module definition header file.
+#include "genhdr/moduledefs.h"
+#endif
+
 extern const mp_map_t mp_builtin_module_map;
 
-mp_obj_t mp_module_get(qstr module_name);
-void mp_module_register(qstr qstr, mp_obj_t module);
-
-mp_obj_t mp_module_search_umodule(const char *module_str);
-
-#if MICROPY_MODULE_BUILTIN_INIT
-void mp_module_call_init(qstr module_name, mp_obj_t module_obj);
-#else
-static inline void mp_module_call_init(qstr module_name, mp_obj_t module_obj) {
-    (void)module_name;
-    (void)module_obj;
-}
+#if MICROPY_HAVE_REGISTERED_EXTENSIBLE_MODULES
+extern const mp_map_t mp_builtin_extensible_module_map;
 #endif
+
+mp_obj_t mp_module_get_builtin(qstr module_name, bool extensible);
+
+void mp_module_generic_attr(qstr attr, mp_obj_t *dest, const uint16_t *keys, mp_obj_t *values);
+
+static inline mp_obj_dict_t *mp_obj_module_get_globals(mp_obj_t module) {
+    return ((mp_obj_module_t *)MP_OBJ_TO_PTR(module))->globals;
+}
 
 #endif // MICROPY_INCLUDED_PY_OBJMODULE_H

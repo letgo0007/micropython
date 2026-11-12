@@ -1,4 +1,5 @@
 # test passing addresses to viper
+# requires: viper
 
 
 @micropython.viper
@@ -21,7 +22,7 @@ def memsum(src: ptr8, n: int) -> int:
 
 
 # create array and get its address
-ar = bytearray("0000")
+ar = bytearray(b"0000")
 addr = get_addr(ar)
 print(type(ar))
 print(type(addr))

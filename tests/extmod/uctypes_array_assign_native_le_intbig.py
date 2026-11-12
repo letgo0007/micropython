@@ -1,4 +1,6 @@
-import usys
+# requires: int-big
+
+import sys
 
 try:
     import uctypes
@@ -6,7 +8,7 @@ except ImportError:
     print("SKIP")
     raise SystemExit
 
-if usys.byteorder != "little":
+if sys.byteorder != "little":
     print("SKIP")
     raise SystemExit
 

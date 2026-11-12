@@ -2,12 +2,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "py/builtin.h"
 #include "py/compile.h"
 #include "py/runtime.h"
 #include "py/repl.h"
 #include "py/gc.h"
 #include "py/mperrno.h"
-#include "lib/utils/pyexec.h"
+#include "shared/runtime/pyexec.h"
 
 #if MICROPY_ENABLE_COMPILER
 void do_str(const char *src, mp_parse_input_kind_t input_kind) {
@@ -28,7 +29,7 @@ void do_str(const char *src, mp_parse_input_kind_t input_kind) {
 
 static char *stack_top;
 #if MICROPY_ENABLE_GC
-static char heap[2048];
+static char heap[MICROPY_HEAP_SIZE];
 #endif
 
 int main(int argc, char **argv) {
@@ -54,7 +55,7 @@ int main(int argc, char **argv) {
     // do_str("print('hello world!', list(x+1 for x in range(10)), end='eol\\n')", MP_PARSE_SINGLE_INPUT);
     // do_str("for i in range(10):\r\n  print(i)", MP_PARSE_FILE_INPUT);
     #else
-    pyexec_frozen_module("frozentest.py");
+    pyexec_frozen_module("frozentest.py", false);
     #endif
     mp_deinit();
     return 0;
@@ -68,11 +69,11 @@ void gc_collect(void) {
     gc_collect_start();
     gc_collect_root(&dummy, ((mp_uint_t)stack_top - (mp_uint_t)&dummy) / sizeof(mp_uint_t));
     gc_collect_end();
-    gc_dump_info();
+    gc_dump_info(&mp_plat_print);
 }
 #endif
 
-mp_lexer_t *mp_lexer_new_from_file(const char *filename) {
+mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
     mp_raise_OSError(MP_ENOENT);
 }
 
@@ -80,18 +81,13 @@ mp_import_stat_t mp_import_stat(const char *path) {
     return MP_IMPORT_STAT_NO_EXIST;
 }
 
-mp_obj_t mp_builtin_open(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs) {
-    return mp_const_none;
-}
-MP_DEFINE_CONST_FUN_OBJ_KW(mp_builtin_open_obj, 1, mp_builtin_open);
-
 void nlr_jump_fail(void *val) {
     while (1) {
         ;
     }
 }
 
-void NORETURN __fatal_error(const char *msg) {
+void MP_NORETURN __fatal_error(const char *msg) {
     while (1) {
         ;
     }

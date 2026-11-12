@@ -1,10 +1,9 @@
 # test setting the thread stack size
 #
 # MIT license; Copyright (c) 2016 Damien P. George on behalf of Pycom Ltd
-try:
-    import usys as sys
-except ImportError:
-    import sys
+
+import sys
+import time
 import _thread
 
 # different implementations have different minimum sizes
@@ -41,12 +40,17 @@ n_finished = 0
 # set stack size and spawn a few threads
 _thread.stack_size(sz)
 for i in range(n_thread):
-    _thread.start_new_thread(thread_entry, ())
+    while True:
+        try:
+            _thread.start_new_thread(thread_entry, ())
+            break
+        except OSError:
+            pass
 
 # reset stack size to default (for subsequent scripts on baremetal)
 _thread.stack_size()
 
 # busy wait for threads to finish
 while n_finished < n_thread:
-    pass
+    time.sleep(0)
 print("done")

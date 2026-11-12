@@ -2,6 +2,7 @@
 #
 # MIT license; Copyright (c) 2016 Damien P. George on behalf of Pycom Ltd
 
+import time
 import _thread
 
 
@@ -25,9 +26,14 @@ n_finished = 0
 
 # spawn threads
 for i in range(n_thread):
-    _thread.start_new_thread(thread_entry, ())
+    while True:
+        try:
+            _thread.start_new_thread(thread_entry, ())
+            break
+        except OSError:
+            pass
 
 # busy wait for threads to finish
 while n_finished < n_thread:
-    pass
+    time.sleep(0)
 print("done")

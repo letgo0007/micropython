@@ -1,6 +1,6 @@
 # cmdline: -v -v -v
 # test printing of the parse-tree
-
+# requires: coverage
 for i in ():
     pass
 a = None
@@ -10,3 +10,4 @@ d = b"bytes"
 e = b"a very long bytes that will not be interned"
 f = 123456789012345678901234567890
 g = 123
+h = f"fstring: '{b}'"

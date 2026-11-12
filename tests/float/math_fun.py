@@ -1,4 +1,5 @@
 # Tests the functions imported from math
+# requires: float
 
 try:
     from math import *
@@ -38,12 +39,15 @@ functions = [
 ]
 
 for function_name, function, test_vals in functions:
-    print(function_name)
     for value in test_vals:
         try:
-            print("{:.5g}".format(function(value)))
+            ans = "{:.5g}".format(function(value))
         except ValueError as e:
-            print(str(e))
+            ans = str(e)
+            if ans.startswith("expected a ") or ans == "":
+                # CPython 3.14 changed messages to be more detailed; convert them back to simple ones
+                ans = "math domain error"
+        print("{}({:.5g}) = {}".format(function_name, value, ans))
 
 tuple_functions = [
     ("frexp", frexp, test_values),
@@ -51,10 +55,9 @@ tuple_functions = [
 ]
 
 for function_name, function, test_vals in tuple_functions:
-    print(function_name)
     for value in test_vals:
         x, y = function(value)
-        print("{:.5g} {:.5g}".format(x, y))
+        print("{}({:.5g}) = ({:.5g}, {:.5g})".format(function_name, value, x, y))
 
 binary_functions = [
     (
@@ -83,9 +86,9 @@ binary_functions = [
 ]
 
 for function_name, function, test_vals in binary_functions:
-    print(function_name)
     for value1, value2 in test_vals:
         try:
-            print("{:.5g}".format(function(value1, value2)))
+            ans = "{:.5g}".format(function(value1, value2))
         except (ValueError, ZeroDivisionError) as e:
-            print(type(e))
+            ans = type(e)
+        print("{}({:.5g}, {:.5g}) = {}".format(function_name, value1, value2, ans))

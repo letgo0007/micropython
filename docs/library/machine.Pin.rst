@@ -42,7 +42,7 @@ Usage Model::
 Constructors
 ------------
 
-.. class:: Pin(id, mode=-1, pull=-1, *, value, drive, alt)
+.. class:: Pin(id, mode=-1, pull=-1, *, value=None, drive=0, alt=-1)
 
    Access the pin peripheral (GPIO pin) associated with the given ``id``.  If
    additional arguments are given in the constructor then they are used to initialise
@@ -74,6 +74,8 @@ Constructors
        - ``Pin.ALT_OPEN_DRAIN`` - The Same as ``Pin.ALT``, but the pin is configured as
          open-drain.  Not all ports implement this mode.
 
+       - ``Pin.ANALOG`` - Pin is configured for analog input, see the :class:`ADC` class.
+
      - ``pull`` specifies if the pin has a (weak) pull resistor attached, and can be
        one of:
 
@@ -85,9 +87,9 @@ Constructors
        output pin value if given, otherwise the state of the pin peripheral remains
        unchanged.
 
-     - ``drive`` specifies the output power of the pin and can be one of: ``Pin.LOW_POWER``,
-       ``Pin.MED_POWER`` or ``Pin.HIGH_POWER``.  The actual current driving capabilities
-       are port dependent.  Not all ports implement this argument.
+     - ``drive`` specifies the output power of the pin and can be one of: ``Pin.DRIVE_0``,
+       ``Pin.DRIVE_1``, etc., increasing in drive strength.  The actual current driving
+       capabilities are port dependent.  Not all ports implement this argument.
 
      - ``alt`` specifies an alternate function for the pin and the values it can take are
        port dependent.  This argument is valid only for ``Pin.ALT`` and ``Pin.ALT_OPEN_DRAIN``
@@ -106,7 +108,7 @@ Constructors
 Methods
 -------
 
-.. method:: Pin.init(mode=-1, pull=-1, *, value, drive, alt)
+.. method:: Pin.init(mode=-1, pull=-1, *, value=None, drive=0, alt=-1)
 
    Re-initialise the pin using the given parameters.  Only those arguments that
    are specified will be set.  The rest of the pin peripheral state will remain
@@ -207,34 +209,80 @@ The following methods are not part of the core Pin API and only implemented on c
 
    Set pin to "0" output level.
 
-   Availability: nrf, rp2, stm32 ports.
+   Availability: mimxrt, nrf, psoc-edge, renesas-ra, rp2, samd, stm32 ports.
 
 .. method:: Pin.high()
 
    Set pin to "1" output level.
 
-   Availability: nrf, rp2, stm32 ports.
+   Availability: mimxrt, nrf, psoc-edge, renesas-ra, rp2, samd, stm32 ports.
 
 .. method:: Pin.mode([mode])
 
    Get or set the pin mode.
    See the constructor documentation for details of the ``mode`` argument.
 
-   Availability: cc3200, stm32 ports.
+   Availability: cc3200, psoc-edge, stm32 ports.
 
 .. method:: Pin.pull([pull])
 
    Get or set the pin pull state.
    See the constructor documentation for details of the ``pull`` argument.
 
-   Availability: cc3200, stm32 ports.
+   Availability: cc3200, psoc-edge, stm32 ports.
 
 .. method:: Pin.drive([drive])
 
    Get or set the pin drive strength.
    See the constructor documentation for details of the ``drive`` argument.
 
-   Availability: cc3200 port.
+   Availability: cc3200, psoc-edge ports.
+
+.. method:: Pin.toggle()
+
+   Toggle output pin from "0" to "1" or vice-versa.
+
+   Availability: cc3200, esp32, esp8266, mimxrt, psoc-edge, rp2, samd ports.
+
+Attributes
+----------
+
+.. data:: Pin.board
+
+   Contains pins named after the board's silkscreen or schematic labels.
+   For example ``Pin.board.X1`` or ``Pin.board.LED``.
+
+   Availability: alif, esp32, mimxrt, nrf, renesas-ra, rp2, samd, stm32 ports.
+
+.. data:: Pin.cpu
+
+   Contains the MCU pin names as given in the datasheet.
+   For example ``Pin.cpu.A0`` or ``Pin.cpu.GPIO0``.
+
+   Availability: alif, mimxrt, nrf, renesas-ra, rp2, samd, stm32 ports.
+
+Multiple board pins can refer to the same CPU pin. Not all ports provide
+both attributes, and the available names depend on the board definition. On
+the esp32 port only ``Pin.board`` is provided, and only for boards whose
+definition includes named pins (e.g. ``UM_TINYS3``, ``M5STACK_NANOC6``).
+Generic ESP32 boards do not define any board pin names.
+
+When constructing a ``Pin`` from a string name, the board pins are searched
+first, then the cpu pins::
+
+    from machine import Pin
+
+    # On a Pyboard v1.0, these all refer to the same physical pin:
+    p = Pin(Pin.board.X1, Pin.OUT)
+    p = Pin(Pin.cpu.A0, Pin.OUT)
+    p = Pin("X1", Pin.OUT)         # searches Pin.board, then Pin.cpu
+
+    # On a Raspberry Pi Pico W:
+    p = Pin(Pin.board.LED, Pin.OUT)
+    p = Pin("LED", Pin.OUT)
+
+Use ``help(Pin.board)`` or ``help(Pin.cpu)`` to list the pin names available
+on a particular board.
 
 Constants
 ---------
@@ -247,21 +295,35 @@ not all constants are available on all ports.
           Pin.OPEN_DRAIN
           Pin.ALT
           Pin.ALT_OPEN_DRAIN
+          Pin.ANALOG
 
    Selects the pin mode.
 
 .. data:: Pin.PULL_UP
           Pin.PULL_DOWN
-          Pin.PULL_HOLD
 
    Selects whether there is a pull up/down resistor.  Use the value
    ``None`` for no pull.
 
-.. data:: Pin.LOW_POWER
-          Pin.MED_POWER
-          Pin.HIGH_POWER
+   Some ports have a different constants set that can be used to select
+   hardware-specific behaviour:
 
-   Selects the pin drive strength.
+   - The esp8266 port does not have pull-down resistors on GPIO pins, hence
+     ``Pin.PULL_DOWN`` is not supported.
+   - The mimxrt port has several extra constants to enable different pull
+     modes: ``Pin.PULL_UP_22K`` enables a 22KΩ pull-up on the pin,
+     ``Pin.PULL_UP_47K`` enables a 47KΩ pull-up on the pin, and
+     ``Pin.PULL_HOLD`` that puts the pin into high-impedance mode.  The
+     ``Pin.PULL_UP`` and ``Pin.PULL_DOWN`` constants will use a 100KΩ internal
+     resistor.
+
+.. data:: Pin.DRIVE_0
+          Pin.DRIVE_1
+          Pin.DRIVE_2
+
+   Selects the pin drive strength.  A port may define additional drive
+   constants with increasing number corresponding to increasing drive
+   strength.
 
 .. data:: Pin.IRQ_FALLING
           Pin.IRQ_RISING

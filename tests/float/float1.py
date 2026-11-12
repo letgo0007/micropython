@@ -1,4 +1,5 @@
 # test basic float capabilities
+# requires: float
 
 # literals
 print(0.12)
@@ -88,7 +89,7 @@ except ZeroDivisionError:
     print("ZeroDivisionError")
 
 try:
-    0.0 ** -1
+    0.0**-1
 except ZeroDivisionError:
     print("ZeroDivisionError")
 

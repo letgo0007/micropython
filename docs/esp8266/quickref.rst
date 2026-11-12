@@ -3,6 +3,11 @@
 Quick reference for the ESP8266
 ===============================
 
+.. warning::
+
+   The ESP8266 port is :ref:`not actively maintained and contains security
+   vulnerabilities <esp8266-not-actively-maintained>`.
+
 .. image:: img/adafruit_products_pinoutstop.jpg
     :alt: Adafruit Feather HUZZAH board
     :width: 640px
@@ -49,42 +54,42 @@ The :mod:`esp` module::
 Networking
 ----------
 
-The :mod:`network` module::
+The :class:`network.WLAN` class in the :mod:`network` module::
 
     import network
 
-    wlan = network.WLAN(network.STA_IF) # create station interface
+    wlan = network.WLAN(network.WLAN.IF_STA) # create station interface
     wlan.active(True)       # activate the interface
     wlan.scan()             # scan for access points
     wlan.isconnected()      # check if the station is connected to an AP
-    wlan.connect('essid', 'password') # connect to an AP
-    wlan.config('mac')      # get the interface's MAC adddress
-    wlan.ifconfig()         # get the interface's IP/netmask/gw/DNS addresses
+    wlan.connect('ssid', 'key') # connect to an AP
+    wlan.config('mac')      # get the interface's MAC address
+    wlan.ipconfig('addr4')  # get the interface's IPv4 addresses
 
-    ap = network.WLAN(network.AP_IF) # create access-point interface
+    ap = network.WLAN(network.WLAN.IF_AP) # create access-point interface
     ap.active(True)         # activate the interface
-    ap.config(essid='ESP-AP') # set the ESSID of the access point
+    ap.config(ssid='ESP-AP') # set the SSID of the access point
 
 A useful function for connecting to your local WiFi network is::
 
     def do_connect():
         import network
-        wlan = network.WLAN(network.STA_IF)
+        wlan = network.WLAN(network.WLAN.IF_STA)
         wlan.active(True)
         if not wlan.isconnected():
             print('connecting to network...')
-            wlan.connect('essid', 'password')
+            wlan.connect('ssid', 'key')
             while not wlan.isconnected():
                 pass
-        print('network config:', wlan.ifconfig())
+        print('network config:', wlan.ipconfig('addr4'))
 
-Once the network is established the :mod:`socket <usocket>` module can be used
+Once the network is established the :mod:`socket <socket>` module can be used
 to create and use TCP/UDP sockets as usual.
 
 Delay and timing
 ----------------
 
-Use the :mod:`time <utime>` module::
+Use the :mod:`time <time>` module::
 
     import time
 
@@ -107,6 +112,9 @@ with timer ID of -1::
     tim.init(period=2000, mode=Timer.PERIODIC, callback=lambda t:print(2))
 
 The period is in milliseconds.
+
+By default, timer callbacks are scheduled as soft interrupts on this port.
+Specify ``hard=True`` to run them in hard interrupt context instead.
 
 Pins and GPIO
 -------------
@@ -138,6 +146,10 @@ Also note that Pin(16) is a special pin (used for wakeup from deepsleep
 mode) and may be not available for use with higher-level classes like
 ``Neopixel``.
 
+There's a higher-level abstraction :ref:`machine.Signal <machine.Signal>`
+which can be used to invert a pin. Useful for illuminating active-low LEDs
+using ``on()`` or ``value(1)``.
+
 UART (serial bus)
 -----------------
 
@@ -159,23 +171,23 @@ sys.stdin.read() if it's needed to read characters from the UART(0)
 while it's also used for the REPL (or detach, read, then reattach).
 When detached the UART(0) can be used for other purposes.
 
-If there are no objects in any of the dupterm slots when the REPL is
-started (on hard or soft reset) then UART(0) is automatically attached.
-Without this, the only way to recover a board without a REPL would be to
-completely erase and reflash (which would install the default boot.py which
+If there are no objects in any of the dupterm slots when the REPL is started (on
+:doc:`hard or soft reset </reference/reset_boot>`) then UART(0) is automatically
+attached. Without this, the only way to recover a board without a REPL would be
+to completely erase and reflash (which would install the default boot.py which
 attaches the REPL).
 
 To detach the REPL from UART0, use::
 
-    import uos
-    uos.dupterm(None, 1)
+    import os
+    os.dupterm(None, 1)
 
 The REPL is attached by default. If you have detached it, to reattach
 it use::
 
-    import uos, machine
+    import os, machine
     uart = machine.UART(0, 115200)
-    uos.dupterm(uart, 1)
+    os.dupterm(uart, 1)
 
 PWM (pulse width modulation)
 ----------------------------
@@ -266,11 +278,11 @@ alias of :ref:`machine.SoftI2C <machine.SoftI2C>`)::
     # construct an I2C bus
     i2c = I2C(scl=Pin(5), sda=Pin(4), freq=100000)
 
-    i2c.readfrom(0x3a, 4)   # read 4 bytes from slave device with address 0x3a
-    i2c.writeto(0x3a, '12') # write '12' to slave device with address 0x3a
+    i2c.readfrom(0x3a, 4)   # read 4 bytes from peripheral device with address 0x3a
+    i2c.writeto(0x3a, '12') # write '12' to peripheral device with address 0x3a
 
     buf = bytearray(10)     # create a buffer with 10 bytes
-    i2c.writeto(0x3a, buf)  # write the given buffer to the slave
+    i2c.writeto(0x3a, buf)  # write the given buffer to the peripheral
 
 Real time clock (RTC)
 ---------------------
@@ -280,7 +292,9 @@ See :ref:`machine.RTC <machine.RTC>` ::
     from machine import RTC
 
     rtc = RTC()
-    rtc.datetime((2017, 8, 23, 1, 12, 48, 0, 0)) # set a specific date and time
+    rtc.datetime((2017, 8, 23, 0, 1, 12, 48, 0)) # set a specific date and
+                                                 # time, eg. 2017/8/23 1:12:48
+                                                 # the day-of-week value is ignored
     rtc.datetime() # get date and time
 
     # synchronize with ntp
@@ -292,6 +306,17 @@ See :ref:`machine.RTC <machine.RTC>` ::
 .. note:: Not all methods are implemented: `RTC.now()`, `RTC.irq(handler=*) <RTC.irq>`
           (using a custom handler), `RTC.init()` and `RTC.deinit()` are
           currently not supported.
+
+WDT (Watchdog timer)
+--------------------
+
+See :ref:`machine.WDT <machine.WDT>`. ::
+
+    from machine import WDT
+
+    # enable the WDT
+    wdt = WDT()
+    wdt.feed()
 
 Deep-sleep mode
 ---------------
@@ -359,17 +384,13 @@ Use the ``neopixel`` module::
     np.write()              # write data to all pixels
     r, g, b = np[0]         # get first pixel colour
 
-For low-level driving of a NeoPixel::
-
-    import esp
-    esp.neopixel_write(pin, grb_buf, is800khz)
-
 .. Warning::
    By default ``NeoPixel`` is configured to control the more popular *800kHz*
    units. It is possible to use alternative timing to control other (typically
    400kHz) devices by passing ``timing=0`` when constructing the
    ``NeoPixel`` object.
 
+For low-level driving of a NeoPixel see `machine.bitstream`.
 
 APA102 driver
 -------------
@@ -408,6 +429,20 @@ The DHT driver is implemented in software and works on all pins::
     d.measure()
     d.temperature() # eg. 23.6 (°C)
     d.humidity()    # eg. 41.3 (% RH)
+
+SSD1306 driver
+--------------
+
+Driver for SSD1306 monochrome OLED displays. See tutorial :ref:`ssd1306`. ::
+
+    from machine import Pin, I2C
+    import ssd1306
+
+    i2c = I2C(scl=Pin(5), sda=Pin(4), freq=100000)
+    display = ssd1306.SSD1306_I2C(128, 64, i2c)
+
+    display.text('Hello World', 0, 0, 1)
+    display.show()
 
 WebREPL (web browser interactive prompt)
 ----------------------------------------

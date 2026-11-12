@@ -25,13 +25,15 @@ into the firmware image as part of the main firmware compilation process, which 
 the bytecode will be executed from ROM. This can lead to a significant memory saving, and
 reduce heap fragmentation.
 
+See :ref:`manifest` for more information.
+
 Variables
 ---------
 
 MicroPython processes local and global variables differently. Global variables
 are stored and looked up from a global dictionary that is allocated on the heap
 (note that each module has its own separate dict, so separate namespace).
-Local variables on the other hand are are stored on the Python value stack, which may
+Local variables on the other hand are stored on the Python value stack, which may
 live on the C stack or on the heap.  They are accessed directly by their offset
 within the Python stack, which is more efficient than a global lookup in a dict.
 
@@ -56,6 +58,9 @@ Compiles to:
 
     X = 1
     foo(1, 2)
+
+See :func:`micropython.const` for complete details on usage requirements and
+limitations.
 
 Allocation of memory
 --------------------

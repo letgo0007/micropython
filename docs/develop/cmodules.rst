@@ -8,8 +8,8 @@ limitations with the Python environment, often due to an inability to access
 certain hardware resources or Python speed limitations.
 
 If your limitations can't be resolved with suggestions in :ref:`speed_python`,
-writing some or all of your module in C (and/or C++ if implemented for your port)
-is a viable option.
+writing some or all of your module in C (and/or
+:ref:`C++ if implemented for your port<cxx_support>`) is a viable option.
 
 If your module is designed to access or work with commonly available
 hardware or libraries please consider implementing it inside the MicroPython
@@ -49,9 +49,17 @@ A MicroPython user C module is a directory with the following files:
   in your ``micropython.mk`` to a local make variable,
   eg ``EXAMPLE_MOD_DIR := $(USERMOD_DIR)``
 
-  Your ``micropython.mk`` must add your modules source files relative to your
-  expanded copy of ``$(USERMOD_DIR)`` to ``SRC_USERMOD``, eg
-  ``SRC_USERMOD += $(EXAMPLE_MOD_DIR)/example.c``
+  Your ``micropython.mk`` must add your modules source files to the
+  ``SRC_USERMOD_C`` or ``SRC_USERMOD_LIB_C`` variables. The former will be
+  processed for ``MP_QSTR_`` and ``MP_REGISTER_MODULE`` definitions, the latter
+  will not (e.g. helpers and library code that isn't MicroPython-specific).
+  These paths should include your expanded copy of ``$(USERMOD_DIR)``, e.g.::
+
+    SRC_USERMOD_C += $(EXAMPLE_MOD_DIR)/modexample.c
+    SRC_USERMOD_LIB_C += $(EXAMPLE_MOD_DIR)/utils/algorithm.c
+
+  Similarly, use ``SRC_USERMOD_CXX`` and ``SRC_USERMOD_LIB_CXX`` for C++
+  source files. If you want to include assembly files use ``SRC_USERMOD_LIB_ASM``.
 
   If you have custom compiler options (like ``-I`` to add directories to search
   for header files), these should be added to ``CFLAGS_USERMOD`` for C code
@@ -87,11 +95,14 @@ A MicroPython user C module is a directory with the following files:
 Basic example
 -------------
 
-This simple module named ``cexample`` provides a single function
-``cexample.add_ints(a, b)`` which adds the two integer args together and returns
-the result. It can be found in the MicroPython source tree
+The ``cexample`` module provides examples for a function and a class. The
+``cexample.add_ints(a, b)`` function adds two integer args together and returns
+the result. The ``cexample.Timer()`` type creates timers that can be used to
+measure the elapsed time since the object is instantiated.
+
+The module can be found in the MicroPython source tree
 `in the examples directory <https://github.com/micropython/micropython/tree/master/examples/usercmodule/cexample>`_
-and has a source file and a Makefile fragment with content as descibed above::
+and has a source file and a Makefile fragment with content as described above::
 
     micropython/
     └──examples/
@@ -221,23 +232,25 @@ as described above.
 If a module is not enabled by default then the corresponding C preprocessor macro
 must be enabled.  This macro name can be found by searching for the ``MP_REGISTER_MODULE``
 line in the module's source code (it usually appears at the end of the main source file).
-The third argument to ``MP_REGISTER_MODULE`` is the macro name, and this must be set
-to 1 using ``CFLAGS_EXTRA`` to make the module available.  If the third argument is just
-the number 1 then the module is enabled by default.
+This macro should be surrounded by a ``#if X`` / ``#endif`` pair, and the configuration
+option ``X`` must be set to 1 using ``CFLAGS_EXTRA`` to make the module available.  If
+there is no ``#if X`` / ``#endif`` pair then the module is enabled by default.
 
 For example, the ``examples/usercmodule/cexample`` module is enabled by default so
 has the following line in its source code:
 
   .. code-block:: c
 
-      MP_REGISTER_MODULE(MP_QSTR_cexample, example_user_cmodule, 1);
+      MP_REGISTER_MODULE(MP_QSTR_cexample, example_user_cmodule);
 
 Alternatively, to make this module disabled by default but selectable through
 a preprocessor configuration option, it would be:
 
   .. code-block:: c
 
-      MP_REGISTER_MODULE(MP_QSTR_cexample, example_user_cmodule, MODULE_CEXAMPLE_ENABLED);
+      #if MODULE_CEXAMPLE_ENABLED
+      MP_REGISTER_MODULE(MP_QSTR_cexample, example_user_cmodule);
+      #endif
 
 In this case the module is enabled by adding ``CFLAGS_EXTRA=-DMODULE_CEXAMPLE_ENABLED=1``
 to the ``make`` command, or editing ``mpconfigport.h`` or ``mpconfigboard.h`` to add
@@ -251,6 +264,32 @@ structures.  If not done correctly it will compile but importing will
 fail to find the module.
 
 
+Specifying C modules via a manifest
+-----------------------------------
+
+As an alternative to passing ``USER_C_MODULES`` on the command line, C modules
+can be listed inside a frozen manifest using ``c_module()``. This is convenient
+when a board or project always pulls in the same set of C modules: the manifest
+becomes the single place that declares both frozen Python code and the C
+modules required to support it.
+
+.. code-block:: python3
+
+    # In ports/myboard/boards/MYBOARD/manifest.py
+    include("$(PORT_DIR)/boards/manifest.py")
+    c_module("$(MPY_DIR)/examples/usercmodule/cexample")
+    c_module("$(BOARD_DIR)/../../drivers/sensor")
+
+The manifest will need to be loaded via ``FROZEN_MANIFEST`` (either set in
+``mpconfigboard.{mk,cmake}`` or passed on the make command line), and modules
+listed with ``c_module()`` combine additively with any paths supplied via
+``USER_C_MODULES`` on the command line. Duplicate paths are de-duplicated, so
+mixing the two is safe.
+
+See :ref:`manifest` for the full ``c_module()`` API and supported
+``$(VAR)`` path substitutions.
+
+
 Module usage in MicroPython
 ---------------------------
 
@@ -262,3 +301,83 @@ can now be accessed in Python just like any other builtin module, e.g.
     import cexample
     print(cexample.add_ints(1, 3))
     # should display 4
+
+.. code-block:: python
+
+    from cexample import Timer
+    from time import sleep_ms
+
+    watch = Timer()
+    sleep_ms(1000)
+    print(watch.time())
+    # should display approximately 1000
+
+
+.. _c_heap:
+
+C Dynamic Memory Allocation
+---------------------------
+
+MicroPython uses its own "Python heap" for `memorymanagement`,
+which is not the same as the "C heap" used by C library functions ``malloc()``,
+``free()``, etc. Not every MicroPython port comes with a "C heap" at all.
+
+Tier 1 & 2 ports have varying support for C dynamic memory allocation via a "C
+heap":
+
+- unix, windows, esp32 and webassembly ports support C dynamic memory
+  allocation.
+- rp2 port will fail to allocate any memory at runtime unless the firmware is
+  built with ``MICROPY_C_HEAP_SIZE=n`` to reserve ``n`` bytes of memory for a C
+  heap. This memory will not be available for Python code to use.
+- alif, mimxrt, nrf, renesas-ra, samd, and stm32 port builds that include
+  dynamic C allocation will fail at link-time with errors such as ``undefined
+  reference to `malloc'``. MicroPython has no built-in support for dynamic C
+  allocation on these ports. Any solution requires manually adding a C heap
+  implementation to the custom build.
+- zephyr port currently does not support building with user modules.
+
+Python heap as C heap
+~~~~~~~~~~~~~~~~~~~~~
+
+It may be practical for C code to call "Python heap" dynamic allocation
+functions such ``m_malloc()``, ``m_malloc0()`` and ``m_free()`` instead.
+
+See `python_memory_from_c` for more information about this approach.
+
+.. _cxx_support:
+
+C++ Modules
+-----------
+
+Most Tier 1 & 2 MicroPython ports (and some Tier 3) support building C++ user
+modules, using the C++-specific environment variables described above.
+
+Integrating C++ and MicroPython successfully involves some additional
+considerations:
+
+C++ Dynamic Memory Allocation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+C++ programs (as well as C++ Standard Library features) typically use dynamic
+memory allocation. The C++ default memory allocator (i.e. operators ``new`` and
+``delete``) is typically implemented as a layer on top of `c_heap`.
+
+For MicroPython ports which don't include C dynamic memory allocation support,
+C++ dynamic memory allocation can be supported in one of two ways:
+
+- Implement C dynamic memory allocation in your custom build.
+- Implement a custom C++ allocator in your custom build.
+
+Linkage Considerations
+~~~~~~~~~~~~~~~~~~~~~~
+
+Because MicroPython is a C-based project, any symbols which link to or from
+MicroPython need to be qualified ``extern "C"`` in C++ code.
+
+It's strongly recommended to follow the pattern demonstrated in
+`examples/usercmodule/cppexample
+<https://github.com/micropython/micropython/blob/master/examples/usercmodule/cppexample>`_,
+where the Python module is implemented in a minimal C file wrapper around the
+C++ code.
+

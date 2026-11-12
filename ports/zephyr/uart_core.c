@@ -23,43 +23,80 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+
 #include <unistd.h>
 #include "py/mpconfig.h"
+#include "py/runtime.h"
+#include "py/stream.h"
 #include "src/zephyr_getchar.h"
 // Zephyr headers
-#include <drivers/uart.h>
-#include <console/console.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/console/console.h>
+#include <zephyr/drivers/uart.h>
 
 /*
  * Core UART functions to implement for a port
  */
 
+#ifdef CONFIG_MICROPY_GETCHAR_CONSOLE_DRIVER
+static const struct device *const uart_console_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+#endif
+
+uintptr_t mp_hal_stdio_poll(uintptr_t poll_flags) {
+    uintptr_t ret = 0;
+    if (poll_flags & MP_STREAM_POLL_RD) {
+        #ifdef CONFIG_MICROPY_GETCHAR_CONSOLE_SUBSYS
+        // It's not easy to test if tty is readable, so just unconditionally set it for now.
+        ret |= MP_STREAM_POLL_RD;
+        #else
+        if (zephyr_getchar_check()) {
+            ret |= MP_STREAM_POLL_RD;
+        }
+        #endif
+    }
+    if (poll_flags & MP_STREAM_POLL_WR) {
+        ret |= MP_STREAM_POLL_WR;
+    }
+    return ret;
+}
+
 // Receive single character
 int mp_hal_stdin_rx_chr(void) {
-    #ifdef CONFIG_CONSOLE_SUBSYS
-    return console_getchar();
-    #else
-    return zephyr_getchar();
-    #endif
+    for (;;) {
+        int _chr;
+        #ifdef CONFIG_MICROPY_GETCHAR_CONSOLE_SUBSYS
+        _chr = console_getchar();
+        #else
+        _chr = zephyr_getchar();
+        #endif
+        if (_chr >= 0) {
+            return _chr;
+        }
+        mp_event_wait_ms(1);
+    }
 }
 
 // Send string of given length
-void mp_hal_stdout_tx_strn(const char *str, mp_uint_t len) {
-    #ifdef CONFIG_CONSOLE_SUBSYS
+mp_uint_t mp_hal_stdout_tx_strn(const char *str, mp_uint_t len) {
+    mp_uint_t ret = len;
+    #ifdef CONFIG_MICROPY_GETCHAR_CONSOLE_SUBSYS
     while (len--) {
         char c = *str++;
-        while (console_putchar(c) == -1) {
-            k_msleep(1);
+        /* console_putchar returns -EAGAIN when no free tx is available */
+        while (console_putchar(c) == -EAGAIN) {
+            mp_event_wait_ms(1);
         }
     }
     #else
-    static const struct device *uart_console_dev;
-    if (uart_console_dev == NULL) {
-        uart_console_dev = device_get_binding(CONFIG_UART_CONSOLE_ON_DEV_NAME);
-    }
-
+    /* Use poll out directly, because printk and other indirect uart_console access will append
+     * windows line returns to the output.
+     * This works for UART and UART-like serial drivers (CDC ACM) and is equivalent to the
+     * uart_console driver's output.
+     */
     while (len--) {
         uart_poll_out(uart_console_dev, *str++);
     }
     #endif
+    return ret;
 }

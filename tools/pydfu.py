@@ -8,10 +8,8 @@
 DFU, without requiring dfu-util.
 
 See app note AN3156 for a description of the DFU protocol.
-See document UM0391 for a dscription of the DFuse file.
+See document UM0391 for a description of the DFuse file.
 """
-
-from __future__ import print_function
 
 import argparse
 import collections
@@ -22,10 +20,6 @@ import sys
 import usb.core
 import usb.util
 import zlib
-
-# VID/PID
-__VID = 0x0483
-__PID = 0xDF11
 
 # USB request __TIMEOUT
 __TIMEOUT = 4000
@@ -79,15 +73,10 @@ __verbose = None
 # USB DFU interface
 __DFU_INTERFACE = 0
 
-# Python 3 deprecated getargspec in favour of getfullargspec, but
-# Python 2 doesn't have the latter, so detect which one to use
-getargspec = getattr(inspect, "getfullargspec", inspect.getargspec)
-
-if "length" in getargspec(usb.util.get_string).args:
+if "length" in inspect.getfullargspec(usb.util.get_string).args:
     # PyUSB 1.0.0.b1 has the length argument
     def get_string(dev, index):
         return usb.util.get_string(dev, 255, index)
-
 
 else:
     # PyUSB 1.0.0.b2 dropped the length argument
@@ -112,10 +101,10 @@ def find_dfu_cfg_descr(descr):
     return None
 
 
-def init():
+def init(**kwargs):
     """Initializes the found DFU device so that we can program it."""
     global __dev, __cfg_descr
-    devices = get_dfu_devices(idVendor=__VID, idProduct=__PID)
+    devices = get_dfu_devices(**kwargs)
     if not devices:
         raise ValueError("No DFU device found")
     if len(devices) > 1:
@@ -349,8 +338,7 @@ def read_dfu_file(filename):
     #   B   uint8_t     targets     Number of targets
     dfu_prefix, data = consume("<5sBIB", data, "signature version size targets")
     print(
-        "    %(signature)s v%(version)d, image size: %(size)d, "
-        "targets: %(targets)d" % dfu_prefix
+        "    %(signature)s v%(version)d, image size: %(size)d, targets: %(targets)d" % dfu_prefix
     )
     for target_idx in range(dfu_prefix["targets"]):
         # Decode the Image Prefix
@@ -364,7 +352,7 @@ def read_dfu_file(filename):
         #   I       uint32_t    size        Size of image (without prefix)
         #   I       uint32_t    elements    Number of elements in the image
         img_prefix, data = consume(
-            "<6sBI255s2I", data, "signature altsetting named name " "size elements"
+            "<6sBI255s2I", data, "signature altsetting named name size elements"
         )
         img_prefix["num"] = target_idx
         if img_prefix["named"]:
@@ -489,7 +477,7 @@ def get_memory_layout(device):
 
 
 def list_dfu_devices(*args, **kwargs):
-    """Prints a lits of devices detected in DFU mode."""
+    """Prints a list of devices detected in DFU mode."""
     devices = get_dfu_devices(*args, **kwargs)
     if not devices:
         raise SystemExit("No DFU capable devices found")
@@ -565,15 +553,13 @@ def cli_progress(addr, offset, size):
 def main():
     """Test program for verifying this files functionality."""
     global __verbose
-    global __VID
-    global __PID
     # Parse CMD args
     parser = argparse.ArgumentParser(description="DFU Python Util")
     parser.add_argument(
         "-l", "--list", help="list available DFU devices", action="store_true", default=False
     )
-    parser.add_argument("--vid", help="USB Vendor ID", type=lambda x: int(x, 0), default=__VID)
-    parser.add_argument("--pid", help="USB Product ID", type=lambda x: int(x, 0), default=__PID)
+    parser.add_argument("--vid", help="USB Vendor ID", type=lambda x: int(x, 0), default=None)
+    parser.add_argument("--pid", help="USB Product ID", type=lambda x: int(x, 0), default=None)
     parser.add_argument(
         "-m", "--mass-erase", help="mass erase device", action="store_true", default=False
     )
@@ -588,14 +574,18 @@ def main():
 
     __verbose = args.verbose
 
-    __VID = args.vid
-    __PID = args.pid
+    kwargs = {}
+    if args.vid:
+        kwargs["idVendor"] = args.vid
+
+    if args.pid:
+        kwargs["idProduct"] = args.pid
 
     if args.list:
-        list_dfu_devices(idVendor=__VID, idProduct=__PID)
+        list_dfu_devices(**kwargs)
         return
 
-    init()
+    init(**kwargs)
 
     command_run = False
     if args.mass_erase:

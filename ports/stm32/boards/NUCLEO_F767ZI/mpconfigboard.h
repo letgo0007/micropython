@@ -21,6 +21,8 @@ void NUCLEO_F767ZI_board_early_init(void);
 #define MICROPY_HW_CLK_PLLP (RCC_PLLP_DIV2)
 #define MICROPY_HW_CLK_PLLQ (9)
 #define MICROPY_HW_FLASH_LATENCY (FLASH_LATENCY_7) // 210-216 MHz needs 7 wait states
+// HSE comes from ST-LINK 8MHz, not crystal.
+#define MICROPY_HW_CLK_USE_BYPASS (1)
 
 // UART config
 #define MICROPY_HW_UART2_TX         (pin_D5)
@@ -41,7 +43,7 @@ void NUCLEO_F767ZI_board_early_init(void);
 #define MICROPY_HW_UART_REPL        PYB_UART_3
 #define MICROPY_HW_UART_REPL_BAUD   115200
 
-// I2C busses
+// I2C buses
 #define MICROPY_HW_I2C1_SCL         (pin_B8)
 #define MICROPY_HW_I2C1_SDA         (pin_B9)
 #define MICROPY_HW_I2C2_SCL         (pin_F1)
@@ -49,13 +51,13 @@ void NUCLEO_F767ZI_board_early_init(void);
 #define MICROPY_HW_I2C4_SCL         (pin_F14)
 #define MICROPY_HW_I2C4_SDA         (pin_F15)
 
-// SPI
+// SPI buses
 #define MICROPY_HW_SPI3_NSS         (pin_A4)
 #define MICROPY_HW_SPI3_SCK         (pin_B3)
 #define MICROPY_HW_SPI3_MISO        (pin_B4)
 #define MICROPY_HW_SPI3_MOSI        (pin_B5)
 
-// CAN busses
+// CAN buses
 #define MICROPY_HW_CAN1_TX          (pin_D1)
 #define MICROPY_HW_CAN1_RX          (pin_D0)
 

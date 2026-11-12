@@ -36,7 +36,7 @@ Algorithms
 ~~~~~~~~~~
 
 The most important aspect of designing any routine for performance is ensuring that
-the best algorithm is employed. This is a topic for textbooks rather than for a 
+the best algorithm is employed. This is a topic for textbooks rather than for a
 MicroPython guide but spectacular performance gains can sometimes be achieved
 by adopting algorithms known for their efficiency.
 
@@ -57,6 +57,8 @@ and used in various methods.
 
 This is covered in further detail :ref:`Controlling garbage collection <controlling_gc>` below.
 
+.. _speed_buffers:
+
 Buffers
 ~~~~~~~
 
@@ -69,6 +71,13 @@ example, objects which support stream interface (e.g., file or UART) provide ``r
 method which allocates new buffer for read data, but also a ``readinto()`` method
 to read data into an existing buffer.
 
+Some useful classes for creating reusable buffer objects:
+
+- :class:`bytearray`
+- :mod:`array` (:ref:`discussed below<speed_arrays>`)
+- :class:`io.StringIO` and :class:`io.BytesIO`
+- :class:`micropython.RingIO`
+
 Floating point
 ~~~~~~~~~~~~~~
 
@@ -80,20 +89,27 @@ point to sections of the code where performance is not paramount. For example,
 capture ADC readings as integers values to an array in one quick go, and only then
 convert them to floating-point numbers for signal processing.
 
+.. _speed_arrays:
+
 Arrays
 ~~~~~~
 
 Consider the use of the various types of array classes as an alternative to lists.
-The `array` module supports various element types with 8-bit elements supported
+The :mod:`array` module supports various element types with 8-bit elements supported
 by Python's built in `bytes` and `bytearray` classes. These data structures all store
 elements in contiguous memory locations. Once again to avoid memory allocation in critical
 code these should be pre-allocated and passed as arguments or as bound objects.
 
+Memoryviews
+~~~~~~~~~~~
+
 When passing slices of objects such as `bytearray` instances, Python creates
 a copy which involves allocation of the size proportional to the size of slice.
-This can be alleviated using a `memoryview` object. `memoryview` itself
-is allocated on heap, but is a small, fixed-size object, regardless of the size
-of slice it points too.
+This can be alleviated using a `memoryview` object. The `memoryview` itself
+is allocated on the heap, but is a small, fixed-size object, regardless of the size
+of slice it points too. Slicing a `memoryview` creates a new `memoryview`, so this
+cannot be done in an interrupt service routine. Further, the slice syntax ``a:b``
+causes further allocation by instantiating a ``slice(a, b)`` object.
 
 .. code:: python
 
@@ -116,6 +132,55 @@ of buffer and fills in entire buffer. What if you need to put data in the
 middle of existing buffer? Just create a memoryview into the needed section
 of buffer and pass it to ``readinto()``.
 
+Strings vs Bytes
+~~~~~~~~~~~~~~~~
+
+MicroPython uses :ref:`string interning <qstr>` to save space when there are
+multiple identical strings. Each time a new string is allocated at runtime (for
+example, when two other strings are concatenated), MicroPython checks whether
+the new string can be interned to save RAM.
+
+To further elaborate on string concatenation, that applies both to strings
+constructed at runtime and to string literals: so a simple expression like
+``"a" + "b"`` could create up to three interned strings even if the expression
+could be folded into one single concatenated literal at parsing time. Regular
+and multi-line literal strings work exactly the same from this point of view.
+
+In cases like this, interning may end up taking more RAM than needed since all
+intermediate string fragments get stored even if they are only used to build a
+single literal. If the intermediate strings used for the concatenation won't
+appear again, that's RAM that could have been saved by storing the final version
+of the string in the source to begin with.
+
+Doing so not only consumes more RAM than it should, but it is also slower: the
+compiler will generate the necessary opcodes to build the string at runtime
+(ie. load first string object, load second string object, invoke the ``__add__``
+operator function on the first object with the second object, then use the
+result). Using ``@micropython.viper`` or ``@micropython.native`` here would not
+completely solve the problem, it will just generate native code versions of the
+same opcodes. The number of steps it will take to build such a string is the
+same.
+
+If needed (to follow stricter maximum line length rules in source files, for
+example), long string literals can be split using the standard CPython string
+concatenation operator ``\`` and still be considered one single string:
+
+.. code:: python
+
+    LONG_STRING = "long strings can be broken into " \
+        "separate sub-strings like this " \
+        "and will be interned as a single " \
+        "string by MicroPython."
+
+If you have code which performs performance-critical string operations then
+consider using :class:`bytes` objects and literals (i.e. ``b"abc"``). This skips
+the interning check, and can be several times faster than performing the same
+operations with string objects.
+
+.. note:: The fastest performance will always be achieved by avoiding new object
+          creation entirely, for example with a reusable :ref:`buffer as described
+          above<speed_buffers>`.
+
 Identifying the slowest section of code
 ---------------------------------------
 
@@ -123,7 +188,7 @@ This is a process known as profiling and is covered in textbooks and
 (for standard Python) supported by various software tools. For the type of
 smaller embedded application likely to be running on MicroPython platforms
 the slowest function or method can usually be established by judicious use
-of the timing ``ticks`` group of functions documented in `utime`.
+of the timing ``ticks`` group of functions documented in `time`.
 Code execution time can be measured in ms, us, or CPU cycles.
 
 The following enables any function or method to be timed by adding an
@@ -134,9 +199,9 @@ The following enables any function or method to be timed by adding an
     def timed_function(f, *args, **kwargs):
         myname = str(f).split(' ')[1]
         def new_func(*args, **kwargs):
-            t = utime.ticks_us()
+            t = time.ticks_us()
             result = f(*args, **kwargs)
-            delta = utime.ticks_diff(utime.ticks_us(), t)
+            delta = time.ticks_diff(time.ticks_us(), t)
             print('Function {} Time = {:6.3f}ms'.format(myname, delta/1000))
             return result
         return new_func
@@ -149,9 +214,13 @@ The const() declaration
 
 MicroPython provides a ``const()`` declaration. This works in a similar way
 to ``#define`` in C in that when the code is compiled to bytecode the compiler
-substitutes the numeric value for the identifier. This avoids a dictionary
+substitutes the constant value for the identifier. This avoids a dictionary
 lookup at runtime. The argument to ``const()`` may be anything which, at
-compile time, evaluates to an integer e.g. ``0x100`` or ``1 << 8``.
+compile time, evaluates to a constant e.g. ``0x100``, ``1 << 8``,
+``"string"``, ``0.001``, ``b"\x00\xff"`` or ``("read", "write")``.
+
+See :func:`micropython.const` for complete documentation including usage
+requirements, limitations, and examples.
 
 .. _Caching:
 
@@ -186,7 +255,7 @@ process known as garbage collection reclaims the memory used by these redundant
 objects and the allocation is then tried again - a process which can take several
 milliseconds.
 
-There may be benefits in pre-empting this by periodically issuing `gc.collect()`.
+There may be benefits in preempting this by periodically issuing `gc.collect()`.
 Firstly doing a collection before it is actually required is quicker - typically on the
 order of 1ms if done frequently. Secondly you can determine the point in code
 where this time is used rather than have a longer delay occur at random points,
@@ -208,11 +277,16 @@ no adaptation (but see below). It is invoked by means of a function decorator:
         buf = self.linebuf # Cached object
         # code
 
-There are certain limitations in the current implementation of the native code emitter. 
+There are certain limitations in the current implementation of the native code emitter.
 
-* Context managers are not supported (the ``with`` statement).
-* Generators are not supported.
 * If ``raise`` is used an argument must be supplied.
+* The background scheduler (see `micropython.schedule`) is not run during
+  execution of native code.
+* On targets with threading and the GIL, the GIL is not released during
+  execution of native code.
+
+To mitigate the last two points, long running native functions should call
+``time.sleep(0)`` periodically, which will run the scheduler and bounce the GIL.
 
 The trade-off for the improved performance (roughly twice as fast as bytecode) is an
 increase in compiled code size.
@@ -220,7 +294,7 @@ increase in compiled code size.
 The Viper code emitter
 ----------------------
 
-The optimisations discussed above involve standards-compliant Python code. The 
+The optimisations discussed above involve standards-compliant Python code. The
 Viper code emitter is not fully compliant. It supports special Viper native data types
 in pursuit of performance. Integer processing is non-compliant because it uses machine
 words: arithmetic on 32 bit hardware is performed modulo 2**32.
@@ -235,7 +309,7 @@ bit manipulations. It is invoked using a decorator:
     def foo(self, arg: int) -> int:
         # code
 
-As the above fragment illustrates it is beneficial to use Python type hints to assist the Viper optimiser. 
+As the above fragment illustrates it is beneficial to use Python type hints to assist the Viper optimiser.
 Type hints provide information on the data types of arguments and of the return value; these
 are a standard Python language feature formally defined here `PEP0484 <https://www.python.org/dev/peps/pep-0484/>`_.
 Viper supports its own set of types namely ``int``, ``uint`` (unsigned integer), ``ptr``, ``ptr8``,
@@ -245,7 +319,6 @@ Python will interpret the result as 2**32 -1 rather than as -1.
 
 In addition to the restrictions imposed by the native emitter the following constraints apply:
 
-* Functions may have up to four arguments.
 * Default argument values are not permitted.
 * Floating point may be used but is not optimised.
 

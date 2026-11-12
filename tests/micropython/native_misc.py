@@ -1,4 +1,6 @@
 # tests for natively compiled functions
+# requires: native
+
 
 # basic test
 @micropython.native
@@ -14,6 +16,7 @@ import gc
 gc.collect()
 native_test(3)
 
+
 # native with 2 args
 @micropython.native
 def f(a, b):
@@ -21,6 +24,7 @@ def f(a, b):
 
 
 f(1, 2)
+
 
 # native with 3 args
 @micropython.native
@@ -30,10 +34,21 @@ def f(a, b, c):
 
 f(1, 2, 3)
 
+
 # check not operator
 @micropython.native
 def f(a):
     print(not a)
+
+
+f(False)
+f(True)
+
+
+# stack settling in branch
+@micropython.native
+def f(a):
+    print(1, 2, 3, 4 if a else 5)
 
 
 f(False)

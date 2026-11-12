@@ -1,4 +1,5 @@
 # test slice assignment to memoryview
+# requires: slice
 
 try:
     memoryview(bytearray(1))[:] = memoryview(bytearray(1))
@@ -7,13 +8,10 @@ except (NameError, TypeError):
     raise SystemExit
 
 try:
-    import uarray as array
+    import array
 except ImportError:
-    try:
-        import array
-    except ImportError:
-        print("SKIP")
-        raise SystemExit
+    print("SKIP")
+    raise SystemExit
 
 # test slice assignment between memoryviews
 b1 = bytearray(b'1234')

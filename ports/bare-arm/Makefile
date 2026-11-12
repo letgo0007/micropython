@@ -5,7 +5,7 @@ include ../../py/mkenv.mk
 include $(TOP)/py/py.mk
 
 # Set makefile-level MicroPython feature configurations.
-MICROPY_ROM_TEXT_COMPRESSION ?= 1
+MICROPY_ROM_TEXT_COMPRESSION ?= 0
 
 # Define toolchain and other tools.
 CROSS_COMPILE ?= arm-none-eabi-
@@ -14,7 +14,7 @@ PYDFU ?= $(TOP)/tools/pydfu.py
 
 # Set CFLAGS.
 CFLAGS += -I. -I$(TOP) -I$(BUILD)
-CFLAGS += -Wall -Werror -std=c99 -nostdlib
+CFLAGS += -Wall -Werror -std=c99
 CFLAGS += -mthumb -mtune=cortex-m4 -mcpu=cortex-m4 -msoft-float
 CSUPEROPT = -Os # save some code space for performance-critical code
 
